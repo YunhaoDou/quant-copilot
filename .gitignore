@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+.next/
+.turbo/
+dist/
+build/
+*.log
+.pnpm-store/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local data / generated
+data/
+*.sqlite
+*.db
+generated/
+
+# Docker / volumes
+docker-data/
