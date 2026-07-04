@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -27,8 +28,20 @@ export default function Home() {
     <main className="max-w-3xl mx-auto p-10">
       <h1 className="text-3xl font-medium">Quant Copilot</h1>
       <p className="text-sm text-gray-500 mt-1">
-        AI-powered quant research platform · Phase 0 scaffold
+        AI-powered quant research platform
       </p>
+
+      <nav className="mt-6 flex gap-4 text-sm">
+        <Link className="underline" href="/ticker">
+          Ticker data
+        </Link>
+        <Link className="underline" href="/backtest">
+          Backtest comparison
+        </Link>
+        <Link className="underline" href="/research">
+          LLM research
+        </Link>
+      </nav>
 
       <section className="mt-8">
         <h2 className="text-xl font-medium border-b pb-2">System status</h2>
