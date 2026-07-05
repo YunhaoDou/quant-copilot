@@ -1,4 +1,4 @@
-"""Celery app instance. Phase 0 placeholder; tasks added in later phases."""
+"""Celery app instance."""
 from celery import Celery
 
 from app.config import settings
@@ -19,3 +19,8 @@ celery_app.conf.timezone = "UTC"
 def ping():
     """Smoke test task."""
     return "pong"
+
+
+# Registers run_backtest_comparison / run_research_note with this app. Imported at the
+# bottom (after `celery_app` exists) since backtest_tasks imports it back.
+from app.tasks import backtest_tasks  # noqa: E402,F401
