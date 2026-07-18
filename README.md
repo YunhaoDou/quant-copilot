@@ -127,7 +127,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev   # http://localhost:3000
 - ⏳ M5 · 风险面板
 - ⏳ M6 · 部署上线 + 演示视频
 
-完整项目章程见 Obsidian `AI量化研究平台.md`(注意:本仓库这一轮只对齐简历要点,不是把 M1-M6 全做完)。
+本仓库这一轮只对齐简历要点(M1 数据、M3 回测、M2 切片),不是把 M1-M6 全做完;M4-M6 的范围和验收标准见上方 Roadmap。
 
 ## License
 
