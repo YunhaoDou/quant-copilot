@@ -50,6 +50,12 @@ python "${CLAUDE_SKILL_DIR}/scripts/backtest.py" --market us --ticker AAPL --str
   --sweep fast=5,10,20 slow=30,60
 ```
 
+**对比买入持有**（`--vs-buyhold`，验证"技术指标择时"类说法是否站得住）：
+
+```bash
+python "${CLAUDE_SKILL_DIR}/scripts/backtest.py" --market us --ticker AAPL --vs-buyhold
+```
+
 ## 4 个策略模板
 
 | key | 说明 | 默认参数 |

@@ -111,6 +111,21 @@ def print_table(rows: list[dict]) -> None:
         )
 
 
+def buy_and_hold_return(close: pd.Series) -> float:
+    return _safe_float(close.iloc[-1] / close.iloc[0] - 1)
+
+
+def print_verdict(rows: list[dict], bh_return: float) -> None:
+    print(f"\n买入持有基准：{bh_return * 100:.1f}%\n")
+    print(f"{'strategy':<26}{'vs buy-and-hold':<20}{'verdict'}")
+    print("-" * 70)
+    for r in rows:
+        edge = r["total_return"] - bh_return
+        beats = edge > 0
+        verdict = "跑赢基准" if beats else "跑不赢，别信"
+        print(f"{r['strategy']:<26}{edge * 100:>+8.1f}pt{'':<10}{verdict}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Quant strategy backtest — US + CN equities, vectorbt-driven")
     parser.add_argument("--market", choices=["us", "cn"], required=True)
@@ -119,6 +134,7 @@ def main():
     parser.add_argument("--end", default="2025-12-31")
     parser.add_argument("--strategy", choices=list(STRATEGIES), help="omit to compare all 4")
     parser.add_argument("--sweep", nargs="*", help="param=v1,v2,v3 ... requires --strategy")
+    parser.add_argument("--vs-buyhold", action="store_true", help="compare against buy-and-hold, print a verdict per strategy")
     args = parser.parse_args()
 
     close = (fetch_us if args.market == "us" else fetch_cn)(args.ticker, args.start, args.end)
@@ -133,11 +149,14 @@ def main():
             grid[key] = [int(v) if v.lstrip("-").isdigit() else float(v) for v in values.split(",")]
         keys = list(grid.keys())
         rows = [run_single(close, args.strategy, dict(zip(keys, combo))) for combo in itertools.product(*grid.values())]
-        print_table(rows)
     elif args.strategy:
-        print_table([run_single(close, args.strategy)])
+        rows = [run_single(close, args.strategy)]
     else:
-        print_table([run_single(close, key) for key in STRATEGIES])
+        rows = [run_single(close, key) for key in STRATEGIES]
+
+    print_table(rows)
+    if args.vs_buyhold:
+        print_verdict(rows, buy_and_hold_return(close))
 
 
 if __name__ == "__main__":
