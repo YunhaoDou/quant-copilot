@@ -29,6 +29,11 @@ function loadState(): PersonalInvestmentState {
       watchlist: saved.watchlist ?? [],
       research: saved.research ?? [],
       journal: saved.journal ?? [],
+      marketEnvironment: {
+        ...DEFAULT_STATE.marketEnvironment,
+        ...saved.marketEnvironment,
+      },
+      marketThemes: saved.marketThemes ?? [],
     };
   } catch {
     return DEFAULT_STATE;

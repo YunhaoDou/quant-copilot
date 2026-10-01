@@ -4,15 +4,17 @@ import { useState } from "react";
 
 import DashboardPanel from "./DashboardPanel";
 import JournalPanel from "./JournalPanel";
+import MarketRadarPanel from "./MarketRadarPanel";
 import ResearchPanel from "./ResearchPanel";
 import ToolsPanel from "./ToolsPanel";
 import { usePersonalInvestment } from "./usePersonalInvestment";
 import WatchlistPanel from "./WatchlistPanel";
 
-type Tab = "dashboard" | "watchlist" | "research" | "tools" | "journal";
+type Tab = "dashboard" | "market" | "watchlist" | "research" | "tools" | "journal";
 
 const TABS: { id: Tab; label: string; description: string }[] = [
   { id: "dashboard", label: "投资驾驶舱", description: "资产、持仓与20%回撤防线" },
+  { id: "market", label: "A股雷达", description: "环境、仓位与主线共振" },
   { id: "watchlist", label: "A股观察池", description: "估值、股息、质量与观察区间" },
   { id: "research", label: "个股研究", description: "论证、反方观点与失效条件" },
   { id: "tools", label: "模拟工具", description: "仓位冲击与估值情景" },
@@ -72,6 +74,7 @@ export default function PersonalInvestmentSystem() {
 
         <div className="mt-5">
           {tab === "dashboard" && <DashboardPanel state={state} setState={setState} />}
+          {tab === "market" && <MarketRadarPanel state={state} setState={setState} />}
           {tab === "watchlist" && <WatchlistPanel state={state} setState={setState} />}
           {tab === "research" && <ResearchPanel state={state} setState={setState} />}
           {tab === "tools" && <ToolsPanel totalAssets={state.profile.currentAssets} />}
