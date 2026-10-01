@@ -28,34 +28,44 @@ export default function PersonalInvestmentSystem() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f5f7f3]">
-      <div className="mx-auto max-w-7xl px-5 py-7 lg:px-8">
-        <header className="overflow-hidden rounded-3xl bg-[#10281d] px-6 py-7 text-white shadow-xl shadow-emerald-950/10 lg:px-8">
-          <div className="flex flex-wrap items-end justify-between gap-5">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300">Personal Investment OS</div>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight">个人投资决策系统</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-emerald-50/75">用资产配置、仓位和失效条件约束风险；用企业质量和估值支持决策。数据仅保存在当前浏览器，不连接券商。</p>
+    <main className="min-h-screen bg-[#f4f6f2] text-slate-800">
+      <div className="pointer-events-none fixed inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_70%_-20%,rgba(16,185,129,0.12),transparent_48%)]" />
+      <div className="relative mx-auto max-w-[1440px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+        <header className="rounded-[22px] border border-emerald-950/10 bg-[#10281d] px-5 py-5 text-white shadow-[0_18px_45px_rgba(16,40,29,0.14)] sm:px-6 lg:px-7">
+          <div className="flex flex-wrap items-center justify-between gap-5">
+            <div className="flex min-w-0 items-center gap-4">
+              <div className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/10 sm:flex">
+                <span className="text-lg font-semibold text-emerald-200">Q</span>
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-emerald-300/90">
+                  <span>Quant Copilot</span><span className="h-1 w-1 rounded-full bg-emerald-400" /><span>个人投资</span>
+                </div>
+                <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-[28px]">投资决策中心</h1>
+                <p className="mt-1 max-w-2xl text-xs leading-relaxed text-emerald-50/65 sm:text-sm">以风险预算约束仓位，以企业质量和估值支持长期决策。</p>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="rounded-full border border-emerald-300/30 bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-100">自动本地保存</span>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-lg border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-50/90">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,0.12)]" />本地自动保存
+              </span>
               <button
-                className="rounded-lg border border-white/20 px-3 py-1.5 text-xs text-white/80 transition hover:bg-white/10"
+                className="rounded-lg border border-white/15 px-3 py-2 text-xs text-white/70 transition duration-200 hover:border-white/25 hover:bg-white/10 hover:text-white"
                 onClick={() => { if (window.confirm("确认清空所有个人投资数据并恢复默认设置？")) reset(); }}
               >恢复默认</button>
             </div>
           </div>
         </header>
 
-        <nav className="mt-5 grid gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-2 lg:grid-cols-5">
+        <nav className="mt-4 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200/80 bg-white/90 p-1.5 shadow-[0_8px_30px_rgba(15,23,42,0.04)] backdrop-blur">
           {TABS.map((item) => (
             <button
               key={item.id}
               onClick={() => setTab(item.id)}
-              className={`rounded-xl px-4 py-3 text-left transition ${tab === item.id ? "bg-emerald-700 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}
+              className={`min-w-max flex-1 rounded-xl px-4 py-2.5 text-left transition duration-200 sm:min-w-[150px] ${tab === item.id ? "bg-[#173f2c] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
             >
               <div className="text-sm font-semibold">{item.label}</div>
-              <div className={`mt-0.5 text-[11px] ${tab === item.id ? "text-emerald-100" : "text-slate-400"}`}>{item.description}</div>
+              <div className={`mt-0.5 hidden text-[11px] lg:block ${tab === item.id ? "text-emerald-100/70" : "text-slate-400"}`}>{item.description}</div>
             </button>
           ))}
         </nav>
@@ -68,7 +78,7 @@ export default function PersonalInvestmentSystem() {
           {tab === "journal" && <JournalPanel state={state} setState={setState} />}
         </div>
 
-        <footer className="py-8 text-center text-xs text-slate-400">仅用于研究、记录和风险管理，不构成投资建议，不执行真实交易。</footer>
+        <footer className="flex flex-wrap items-center justify-between gap-2 py-8 text-xs text-slate-400"><span>数据保存在当前浏览器 · 不连接券商</span><span>仅用于研究与风险管理，不构成投资建议</span></footer>
       </div>
     </main>
   );

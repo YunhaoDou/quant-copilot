@@ -7,7 +7,13 @@ export function Card({
   children: ReactNode;
   className?: string;
 }) {
-  return <section className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}>{children}</section>;
+  return (
+    <section
+      className={`rounded-[20px] border border-slate-200/80 bg-white p-5 shadow-[0_10px_30px_rgba(15,23,42,0.045)] ${className}`}
+    >
+      {children}
+    </section>
+  );
 }
 
 export function Metric({
@@ -28,9 +34,9 @@ export function Metric({
     danger: "text-red-700",
   }[tone];
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={`mt-1 text-2xl font-semibold tabular-nums ${toneClass}`}>{value}</div>
+    <div className="rounded-2xl border border-slate-200/70 bg-[#f8f9f7] p-4">
+      <div className="text-xs font-medium tracking-wide text-slate-500">{label}</div>
+      <div className={`mt-1.5 text-2xl font-semibold tracking-tight tabular-nums ${toneClass}`}>{value}</div>
       {hint && <div className="mt-1 text-xs text-slate-500">{hint}</div>}
     </div>
   );
@@ -55,18 +61,19 @@ export function Field({
 }
 
 export const inputClass =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100";
+  "w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100/70";
 
 export const buttonClass =
-  "rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-xl bg-[#173f2c] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[#102f21] focus:outline-none focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-50";
 
 export const secondaryButtonClass =
-  "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50";
+  "rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100";
 
 export function Empty({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500">
-      {children}
+    <div className="rounded-2xl border border-dashed border-slate-300 bg-[#fafbf9] px-6 py-10 text-center text-sm text-slate-500">
+      <div className="mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-lg text-slate-400">+</div>
+      <div>{children}</div>
     </div>
   );
 }

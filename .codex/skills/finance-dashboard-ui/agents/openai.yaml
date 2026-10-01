@@ -1,0 +1,4 @@
+interface:
+  display_name: "Finance Dashboard UI"
+  short_description: "Design and verify polished investment dashboards"
+  default_prompt: "Use $finance-dashboard-ui to design or improve this investment interface."

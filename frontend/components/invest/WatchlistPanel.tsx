@@ -26,6 +26,7 @@ const EMPTY_ITEM: Omit<WatchItem, "id"> = {
 
 export default function WatchlistPanel({ state, setState }: Props) {
   const [draft, setDraft] = useState(EMPTY_ITEM);
+  const [showAdd, setShowAdd] = useState(false);
   const [view, setView] = useState<"table" | "cards">("cards");
   const [filter, setFilter] = useState("全部");
 
@@ -41,6 +42,7 @@ export default function WatchlistPanel({ state, setState }: Props) {
       watchlist: [...current.watchlist, { ...draft, id: makeId("watch"), code: draft.code.trim() }],
     }));
     setDraft(EMPTY_ITEM);
+    setShowAdd(false);
   }
 
   function remove(id: string) {
@@ -57,7 +59,7 @@ export default function WatchlistPanel({ state, setState }: Props) {
 
   return (
     <div className="space-y-5">
-      <Card>
+      {showAdd && <Card>
         <div>
           <h2 className="text-lg font-semibold">添加A股观察对象</h2>
           <p className="mt-1 text-sm text-slate-500">数据目前由你手动维护；这样不会把延迟行情误当实时价格。</p>
@@ -79,7 +81,7 @@ export default function WatchlistPanel({ state, setState }: Props) {
           </Field>
         </div>
         <button className={`${buttonClass} mt-4`} onClick={addItem}>加入观察池</button>
-      </Card>
+      </Card>}
 
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -88,6 +90,7 @@ export default function WatchlistPanel({ state, setState }: Props) {
             <p className="mt-1 text-sm text-slate-500">低位仅表示价格位置，是否低估仍需结合盈利质量和估值判断。</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button className={buttonClass} onClick={() => setShowAdd((show) => !show)}>{showAdd ? "收起录入" : "添加公司"}</button>
             <select className={`${inputClass} w-auto`} value={filter} onChange={(e) => setFilter(e.target.value)}>
               <option>全部</option><option>观察</option><option>接近区间</option><option>已进入区间</option><option>排除</option>
             </select>
@@ -102,7 +105,7 @@ export default function WatchlistPanel({ state, setState }: Props) {
             {visible.map((item) => {
               const location = zone(item);
               return (
-                <article key={item.id} className="rounded-xl border border-slate-200 p-4">
+                <article key={item.id} className="rounded-2xl border border-slate-200 p-5 transition hover:border-slate-300 hover:shadow-[0_12px_30px_rgba(15,23,42,0.06)]">
                   <div className="flex items-start justify-between gap-3">
                     <div><h3 className="font-semibold">{item.name}</h3><div className="text-xs text-slate-400">{item.code}</div></div>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${location.cls}`}>{location.label}</span>

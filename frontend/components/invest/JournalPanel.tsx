@@ -27,16 +27,18 @@ const EMPTY: Omit<DecisionEntry, "id"> = {
 
 export default function JournalPanel({ state, setState }: Props) {
   const [draft, setDraft] = useState(EMPTY);
+  const [showForm, setShowForm] = useState(state.journal.length === 0);
 
   function save() {
     if (!draft.code.trim() || !draft.reason.trim()) return;
     setState((current) => ({ ...current, journal: [{ ...draft, id: makeId("decision") }, ...current.journal] }));
     setDraft({ ...EMPTY, date: today() });
+    setShowForm(false);
   }
 
   return (
     <div className="space-y-5">
-      <Card>
+      {showForm && <Card>
         <div>
           <h2 className="text-lg font-semibold">记录一次投资决策</h2>
           <p className="mt-1 text-sm text-slate-500">先写证据和退出条件，再执行；复盘时保留原始理由，不事后改写。</p>
@@ -55,10 +57,13 @@ export default function JournalPanel({ state, setState }: Props) {
           <TextField label="后续复盘" value={draft.lesson} onChange={(lesson) => setDraft({ ...draft, lesson })} placeholder="决策执行后再补充结果与教训。" />
         </div>
         <button className={`${buttonClass} mt-4`} onClick={save}>保存原始决策</button>
-      </Card>
+      </Card>}
 
       <Card>
-        <h2 className="text-lg font-semibold">决策时间线</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><h2 className="text-lg font-semibold">决策时间线</h2><p className="mt-1 text-sm text-slate-500">保留当时的判断依据，避免用结果改写记忆。</p></div>
+          <button className={buttonClass} onClick={() => setShowForm((show) => !show)}>{showForm ? "收起记录" : "记录决策"}</button>
+        </div>
         <div className="mt-4 space-y-3">
           {state.journal.length === 0 ? <Empty>尚无记录。第一条可以先写“为什么把某只股票加入观察池”。</Empty> : state.journal.map((item) => (
             <article key={item.id} className="rounded-xl border border-slate-200 p-4">
