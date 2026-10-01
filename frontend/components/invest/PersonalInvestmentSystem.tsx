@@ -13,7 +13,7 @@ import WatchlistPanel from "./WatchlistPanel";
 type Tab = "dashboard" | "market" | "watchlist" | "research" | "tools" | "journal";
 
 const TABS: { id: Tab; label: string; description: string }[] = [
-  { id: "dashboard", label: "投资驾驶舱", description: "资产、持仓与20%回撤防线" },
+  { id: "dashboard", label: "A股驾驶舱", description: "资产、持仓与20%回撤防线" },
   { id: "market", label: "A股雷达", description: "环境、仓位与主线共振" },
   { id: "watchlist", label: "A股观察池", description: "估值、股息、质量与观察区间" },
   { id: "research", label: "个股研究", description: "论证、反方观点与失效条件" },
@@ -41,10 +41,10 @@ export default function PersonalInvestmentSystem() {
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-emerald-300/90">
-                  <span>Quant Copilot</span><span className="h-1 w-1 rounded-full bg-emerald-400" /><span>个人投资</span>
+                  <span>Quant Copilot</span><span className="h-1 w-1 rounded-full bg-emerald-400" /><span>A股个人投资</span>
                 </div>
-                <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-[28px]">投资决策中心</h1>
-                <p className="mt-1 max-w-2xl text-xs leading-relaxed text-emerald-50/65 sm:text-sm">以风险预算约束仓位，以企业质量和估值支持长期决策。</p>
+                <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-[28px]">A股投资决策中心</h1>
+                <p className="mt-1 max-w-2xl text-xs leading-relaxed text-emerald-50/65 sm:text-sm">先判断政策、资金与情绪，再用风险预算、企业质量和估值约束决策。</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -81,7 +81,7 @@ export default function PersonalInvestmentSystem() {
           {tab === "journal" && <JournalPanel state={state} setState={setState} />}
         </div>
 
-        <footer className="flex flex-wrap items-center justify-between gap-2 py-8 text-xs text-slate-400"><span>数据保存在当前浏览器 · 不连接券商</span><span>仅用于研究与风险管理，不构成投资建议</span></footer>
+        <footer className="flex flex-wrap items-center justify-between gap-2 py-8 text-xs text-slate-400"><span>A股个人研究 · 数据保存在当前浏览器 · 不连接券商</span><span>仅用于研究与风险管理，不构成投资建议</span></footer>
       </div>
     </main>
   );

@@ -7,6 +7,14 @@ description: Design, implement, or review polished investment dashboards and fin
 
 Build a calm, credible decision interface for long-horizon investors. Optimize for comprehension and risk awareness, not trading excitement.
 
+## A-share product scope
+
+- Treat A-shares as the primary market. Default to Chinese labels, RMB, mainland trading dates, and six-digit codes with exchange suffixes when the data provider requires them.
+- Reflect A-share constraints and behavior when relevant: T+1 settlement, price limits, policy sensitivity, liquidity and turnover, sentiment cycles, sector rotation, and delisting/ST risk.
+- Do not use AAPL, SPY, USD, US Treasury yields, PDT, or US options rules in the primary workflow unless the user explicitly asks for a cross-market comparison.
+- Separate three decisions: market environment sets total equity exposure; sector/mainline evidence sets research priority; company quality, valuation, and invalidation determine the individual position.
+- Market strength never overrides the drawdown defense. When signals conflict, risk budget and portfolio survival take priority.
+
 ## Product character
 
 - Professional wealth-management workspace: precise, restrained, information-rich without feeling crowded.
