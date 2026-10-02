@@ -28,7 +28,7 @@ class FakeLLMClient:
         self._responses = list(responses)
         self.calls = 0
 
-    def complete(self, prompt: str):
+    def complete(self, prompt: str, system_prompt: str | None = None):
         self.calls += 1
         text = self._responses.pop(0)
         return text, 100, 50
@@ -86,3 +86,16 @@ async def test_second_call_hits_cache_and_skips_llm(redis):
 
     assert note2["cache_hit"] is True
     assert exhausted_client.calls == 0
+
+
+async def test_different_lang_does_not_share_cache_entry(redis):
+    # Regression: en/zh must not collide on the same Redis key, or a Chinese request
+    # would silently be served a cached English note (or vice versa).
+    en_client = FakeLLMClient([json.dumps(VALID_NOTE)])
+    await get_research_note(redis, "600519", client=en_client, lang="en")
+
+    zh_client = FakeLLMClient([json.dumps(VALID_NOTE)])
+    note_zh = await get_research_note(redis, "600519", client=zh_client, lang="zh")
+
+    assert zh_client.calls == 1  # not served from the "en" cache entry
+    assert note_zh["cache_hit"] is False

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { api, type BacktestResult } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 
 const COLORS: Record<string, string> = {
   sma_crossover: "#2563eb",
@@ -12,17 +13,18 @@ const COLORS: Record<string, string> = {
   bollinger_reversion: "#9333ea",
 };
 
-export default function BacktestPage() {
-  const [symbol, setSymbol] = useState("600519");
+export default function BacktestModule() {
+  const { t } = useLocale();
+  const [symbol, setSymbol] = useState("600519.SS");
   const [results, setResults] = useState<BacktestResult[]>([]);
   const [status, setStatus] = useState("");
 
   async function runComparison() {
-    setStatus("running 4-strategy comparison against stored history...");
+    setStatus(t("backtest.running"));
     try {
       const resp = await api.compareStrategies(symbol);
       setResults(resp.results);
-      setStatus(`done — ${resp.results.length} strategies compared`);
+      setStatus(t("backtest.done", { n: resp.results.length }));
     } catch (e) {
       setStatus(String(e));
     }
@@ -32,19 +34,16 @@ export default function BacktestPage() {
 
   return (
     <main className="max-w-5xl mx-auto p-10">
-      <h1 className="text-2xl font-medium">4-strategy backtest comparison</h1>
-      <p className="text-sm text-gray-500 mt-1">
-        SMA crossover, RSI mean-reversion, time-series momentum, Bollinger reversion — run against the
-        ticker&apos;s full stored history via vectorbt.
-      </p>
+      <h1 className="text-2xl font-medium">{t("backtest.title")}</h1>
+      <p className="text-sm text-gray-500 mt-1">{t("backtest.desc")}</p>
 
       <div className="mt-6 flex gap-2 items-end">
         <label className="text-sm">
-          Symbol (must already be ingested on the Ticker page)
+          {t("backtest.symbolLabel")}
           <input className="border rounded px-2 py-1 block" value={symbol} onChange={(e) => setSymbol(e.target.value)} />
         </label>
         <button className="border rounded px-3 py-1 bg-black text-white" onClick={runComparison}>
-          Run comparison
+          {t("backtest.run")}
         </button>
       </div>
 
@@ -55,12 +54,12 @@ export default function BacktestPage() {
           <table className="mt-8 w-full text-sm border-collapse">
             <thead>
               <tr className="text-left border-b">
-                <th className="py-1">Strategy</th>
-                <th>Total return</th>
-                <th>Sharpe</th>
-                <th>Max drawdown</th>
-                <th>Win rate</th>
-                <th>Trades</th>
+                <th className="py-1">{t("backtest.strategy")}</th>
+                <th>{t("backtest.totalReturn")}</th>
+                <th>{t("backtest.sharpe")}</th>
+                <th>{t("backtest.maxDrawdown")}</th>
+                <th>{t("backtest.winRate")}</th>
+                <th>{t("backtest.trades")}</th>
               </tr>
             </thead>
             <tbody>

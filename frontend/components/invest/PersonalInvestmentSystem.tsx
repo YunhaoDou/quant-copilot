@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import { INVESTMENT_VIEW_EVENT, INVESTMENT_VIEWS, InvestmentView, navigateInvestmentView, readInvestmentView } from "@/lib/invest-navigation";
 
 import DashboardPanel from "./DashboardPanel";
+import FunctionCenterPanel from "./FunctionCenterPanel";
 import JournalPanel from "./JournalPanel";
 import MarketRadarPanel from "./MarketRadarPanel";
 import ResearchPanel from "./ResearchPanel";
@@ -10,20 +13,25 @@ import ToolsPanel from "./ToolsPanel";
 import { usePersonalInvestment } from "./usePersonalInvestment";
 import WatchlistPanel from "./WatchlistPanel";
 
-type Tab = "dashboard" | "market" | "watchlist" | "research" | "tools" | "journal";
-
-const TABS: { id: Tab; label: string; description: string }[] = [
-  { id: "dashboard", label: "A股驾驶舱", description: "资产、持仓与20%回撤防线" },
-  { id: "market", label: "A股雷达", description: "环境、仓位与主线共振" },
-  { id: "watchlist", label: "A股观察池", description: "估值、股息、质量与观察区间" },
-  { id: "research", label: "个股研究", description: "论证、反方观点与失效条件" },
-  { id: "tools", label: "模拟工具", description: "仓位冲击与估值情景" },
-  { id: "journal", label: "决策复盘", description: "保存当时证据与后续教训" },
-];
-
 export default function PersonalInvestmentSystem() {
-  const [tab, setTab] = useState<Tab>("dashboard");
+  const [tab, setTab] = useState<InvestmentView>("dashboard");
   const { state, setState, ready, reset } = usePersonalInvestment();
+
+  useEffect(() => {
+    const sync = () => setTab(readInvestmentView());
+    sync();
+    window.addEventListener("popstate", sync);
+    window.addEventListener(INVESTMENT_VIEW_EVENT, sync);
+    return () => {
+      window.removeEventListener("popstate", sync);
+      window.removeEventListener(INVESTMENT_VIEW_EVENT, sync);
+    };
+  }, []);
+
+  function selectTab(view: InvestmentView) {
+    setTab(view);
+    navigateInvestmentView(view);
+  }
 
   if (!ready) {
     return <div className="mx-auto max-w-7xl px-6 py-16 text-sm text-slate-500">正在载入个人投资系统…</div>;
@@ -59,15 +67,14 @@ export default function PersonalInvestmentSystem() {
           </div>
         </header>
 
-        <nav className="mt-4 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200/80 bg-white/90 p-1.5 shadow-[0_8px_30px_rgba(15,23,42,0.04)] backdrop-blur">
-          {TABS.map((item) => (
+        <nav className="mt-4 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200/80 bg-white/90 p-1.5 shadow-[0_8px_30px_rgba(15,23,42,0.04)] backdrop-blur lg:hidden">
+          {INVESTMENT_VIEWS.map((item) => (
             <button
               key={item.id}
-              onClick={() => setTab(item.id)}
+              onClick={() => selectTab(item.id)}
               className={`min-w-max flex-1 rounded-xl px-4 py-2.5 text-left transition duration-200 sm:min-w-[150px] ${tab === item.id ? "bg-[#173f2c] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
             >
-              <div className="text-sm font-semibold">{item.label}</div>
-              <div className={`mt-0.5 hidden text-[11px] lg:block ${tab === item.id ? "text-emerald-100/70" : "text-slate-400"}`}>{item.description}</div>
+              <div className="text-sm font-semibold">{item.shortLabel}</div>
             </button>
           ))}
         </nav>
@@ -79,6 +86,7 @@ export default function PersonalInvestmentSystem() {
           {tab === "research" && <ResearchPanel state={state} setState={setState} />}
           {tab === "tools" && <ToolsPanel totalAssets={state.profile.currentAssets} />}
           {tab === "journal" && <JournalPanel state={state} setState={setState} />}
+          {tab === "functions" && <FunctionCenterPanel />}
         </div>
 
         <footer className="flex flex-wrap items-center justify-between gap-2 py-8 text-xs text-slate-400"><span>A股个人研究 · 数据保存在当前浏览器 · 不连接券商</span><span>仅用于研究与风险管理，不构成投资建议</span></footer>

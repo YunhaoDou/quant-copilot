@@ -10,14 +10,15 @@ router = APIRouter(prefix="/research", tags=["research"])
 class ResearchRequest(BaseModel):
     symbol: str
     run_async: bool = False
+    lang: str = "en"
 
 
 @router.post("")
 async def research(req: ResearchRequest):
     if req.run_async:
-        task = run_research_note_task.delay(req.symbol)
+        task = run_research_note_task.delay(req.symbol, req.lang)
         return {"task_id": task.id, "status": "queued"}
     try:
-        return await _run_research(req.symbol)
+        return await _run_research(req.symbol, req.lang)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

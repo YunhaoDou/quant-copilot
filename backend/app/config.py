@@ -27,7 +27,20 @@ class Settings(BaseSettings):
     # LLM
     ANTHROPIC_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
+    # DeepSeek (OpenAI-compatible API) — primary LLM for research notes.
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    DEEPSEEK_MODEL: str = "deepseek-chat"
     LLM_CACHE_TTL_HOURS: int = 24
+    NEWS_CACHE_TTL_HOURS: int = 2  # news moves faster than research theses, so cache shorter
+
+    # WxPusher (earnings pipeline WeChat notifications) — optional, unset = push disabled
+    WXPUSHER_APP_TOKEN: str = ""
+    WXPUSHER_UID: str = ""
+
+    # Lark/Discord webhooks (backtest + paper-trade notifications) — optional, unset = push disabled
+    LARK_WEBHOOK_URL: str = ""
+    DISCORD_WEBHOOK_URL: str = ""
 
 
 settings = Settings()

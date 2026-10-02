@@ -12,7 +12,7 @@ from sqlalchemy.pool import NullPool
 from app.config import settings
 from app.models import BacktestCurve, BacktestRun, LLMCall, ResearchNote
 from app.redis_client import redis_client
-from app.services import backtest_engine, data_ingestion, llm_research
+from app.services import backtest_engine, data_ingestion, llm_research, notifications
 from app.tasks.celery_app import celery_app
 
 
@@ -57,6 +57,13 @@ async def _run_comparison(symbol: str, start: str | None = None, end: str | None
                 r["backtest_run_id"] = run.id
                 r["equity_curve"] = {d.strftime("%Y-%m-%d"): float(v) for d, v in curve.items()}
             await session.commit()
+
+            best = max(results, key=lambda r: r["total_return"]) if results else None
+            if best:
+                await notifications.notify_all(
+                    f"Backtest done: {symbol} — best strategy {best['strategy_key']} "
+                    f"({best['total_return']:+.1f}% return, Sharpe {best['sharpe_ratio']:.2f})"
+                )
             return results
     finally:
         await engine.dispose()
@@ -67,10 +74,10 @@ def run_backtest_comparison_task(symbol: str, start: str | None = None, end: str
     return asyncio.run(_run_comparison(symbol, start, end))
 
 
-async def _run_research(symbol: str) -> dict:
+async def _run_research(symbol: str, lang: str = "en") -> dict:
     engine, session_factory = _task_session_factory()
     try:
-        note = await llm_research.get_research_note(redis_client, symbol)
+        note = await llm_research.get_research_note(redis_client, symbol, lang=lang)
         async with session_factory() as session:
             existing = await session.execute(select(ResearchNote).where(ResearchNote.ticker_symbol == symbol))
             if existing.scalars().first() is None or not note.get("cache_hit"):
@@ -103,5 +110,5 @@ async def _run_research(symbol: str) -> dict:
 
 
 @celery_app.task(name="run_research_note")
-def run_research_note_task(symbol: str) -> dict:
-    return asyncio.run(_run_research(symbol))
+def run_research_note_task(symbol: str, lang: str = "en") -> dict:
+    return asyncio.run(_run_research(symbol, lang))

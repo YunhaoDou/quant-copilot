@@ -12,10 +12,14 @@ router = APIRouter(prefix="/tickers", tags=["tickers"])
 
 @router.post("/{symbol}/ingest")
 async def ingest(
-    symbol: str, name: str, start: str = "20140101", session: AsyncSession = Depends(get_session)
+    symbol: str,
+    name: str,
+    market: str = "CN",
+    start: str = "20140101",
+    session: AsyncSession = Depends(get_session),
 ):
     try:
-        count = await data_ingestion.ingest_ticker(session, symbol, name, start=start)
+        count = await data_ingestion.ingest_ticker(session, symbol, name, market=market, start=start)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"ingestion failed: {exc}") from exc
     if count == 0:

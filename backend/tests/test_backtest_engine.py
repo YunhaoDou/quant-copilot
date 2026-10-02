@@ -1,4 +1,4 @@
-"""Backtest engine tests against real 11-year A-share history (no mocking price data —
+"""Backtest engine tests against real 11-year US-equity history (no mocking price data —
 the whole point of this bullet is that the numbers are computed from real market data)."""
 import pandas as pd
 import pytest
@@ -7,7 +7,7 @@ from app.services import data_ingestion
 from app.services.backtest_engine import run_comparison, run_param_sweep
 from app.services.strategies import STRATEGIES
 
-TICKER = "600519"  # Kweichow Moutai — liquid, long real history
+TICKER = "AAPL"  # Apple — liquid, long real history
 
 
 @pytest.fixture(scope="module")
