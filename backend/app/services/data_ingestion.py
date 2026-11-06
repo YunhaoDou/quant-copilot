@@ -25,6 +25,14 @@ def _normalize_date(value: str) -> str:
 
 def fetch_history(symbol: str, start: str = "20140101", end: str | None = None) -> pd.DataFrame:
     """Fetch adjusted daily bars for a ticker as a normalized DataFrame."""
+    if symbol.upper().endswith((".SS", ".SZ", ".SH", ".BJ")) or symbol.isdigit():
+        from app.cycle.market import fetch_daily
+        df = fetch_daily(symbol, 640)
+        df = df[df.trade_date >= _normalize_date(start)]
+        if end:
+            df = df[df.trade_date < _normalize_date(end)]
+        df["trade_date"] = pd.to_datetime(df["trade_date"]).dt.date
+        return df
     raw = yf.Ticker(symbol.upper()).history(
         start=_normalize_date(start),
         end=_normalize_date(end) if end else None,

@@ -16,6 +16,7 @@ import {
 
 import { api, getApiUrl, type FundFlowSignal, type NewsSentiment, type PricePoint } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import LiveQuotes from "../live-quotes";
 
 /* ---- helpers ---- */
 const money = (n: number) => n.toLocaleString("zh-CN", { style: "currency", currency: "CNY", maximumFractionDigits: 2 });
@@ -165,7 +166,8 @@ export default function TickerModule() {
     <main className="max-w-5xl mx-auto px-6 py-8">
       {/* header row */}
       <div className="flex flex-wrap items-end gap-4 mb-6">
-        <h1 className="text-2xl font-medium">{t("ticker.title")}</h1>
+      <LiveQuotes codes={[symbol]} />
+      <h1 className="mt-5 text-2xl font-medium">{t("ticker.title")}</h1>
         <div className="flex gap-2 items-end">
           <label className="text-sm">
             {t("ticker.symbol")}

@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { api, type ResearchNote } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import LiveQuotes from "../live-quotes";
 
 export default function AiResearchModule() {
   const { locale, t } = useLocale();
@@ -25,6 +26,7 @@ export default function AiResearchModule() {
 
   return (
     <main className="max-w-3xl mx-auto p-10">
+      <LiveQuotes codes={[symbol]} />
       <h1 className="text-2xl font-medium">{t("research.title")}</h1>
       <p className="text-sm text-gray-500 mt-1">{t("research.desc")}</p>
       <p className="text-xs text-amber-600 mt-2">{t("research.warn")}</p>

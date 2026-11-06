@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
+import { useLiveQuotes } from "@/lib/live-market";
+import BrokerReadonly from "./broker-readonly";
 
 import {
   DEFAULT_STATE,
@@ -35,10 +37,15 @@ const ALLOCATION_META = [
   { key: "cash" as const, label: "投资现金", color: "bg-amber-500", hex: "#f59e0b" },
 ];
 
-export default function DashboardPanel({ state, setState }: Props) {
+export default function DashboardPanel({ state: recordedState, setState }: Props) {
+  const quotes = useLiveQuotes(recordedState.holdings.map(h => h.code));
+  const state = { ...recordedState, holdings: recordedState.holdings.map(h => {
+    const q = quotes.data?.quotes.find(q => q.code === h.code.replace(/\D/g, "").slice(0, 6));
+    return q && h.quantity != null ? { ...h, marketValue: h.quantity*q.price } : h;
+  }) };
   const [showHoldingForm, setShowHoldingForm] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [holding, setHolding] = useState({ code: "", name: "", marketValue: 0, cost: 0, thesis: "" });
+  const [holding, setHolding] = useState({ code: "", name: "", marketValue: 0, cost: 0, quantity: 0, thesis: "" });
   const risk = useMemo(() => getRiskBudget(state.profile), [state.profile]);
   const holdingsValue = state.holdings.reduce((sum, item) => sum + item.marketValue, 0);
   const holdingsPnl = state.holdings.reduce((sum, item) => sum + item.marketValue - item.cost, 0);
@@ -79,9 +86,9 @@ export default function DashboardPanel({ state, setState }: Props) {
     if (!holding.code.trim() || !holding.name.trim()) return;
     setState((current) => ({
       ...current,
-      holdings: [...current.holdings, { id: makeId("holding"), ...holding, code: holding.code.trim() }],
+      holdings: [...current.holdings, { id: makeId("holding"), ...holding, quantity: holding.quantity > 0 ? holding.quantity : undefined, code: holding.code.trim() }],
     }));
-    setHolding({ code: "", name: "", marketValue: 0, cost: 0, thesis: "" });
+    setHolding({ code: "", name: "", marketValue: 0, cost: 0, quantity: 0, thesis: "" });
     setShowHoldingForm(false);
   }
 
@@ -97,7 +104,7 @@ export default function DashboardPanel({ state, setState }: Props) {
                   {money(state.profile.currentAssets)}
                 </p>
                 <p className={`mt-2 text-sm ${capitalChange >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-                  相对初始本金 {capitalChange >= 0 ? "+" : ""}{money(capitalChange)}
+                  资产差额（含入金，非投资收益） {capitalChange >= 0 ? "+" : ""}{money(capitalChange)}
                 </p>
               </div>
               <div className="rounded-2xl bg-[#edf5ef] px-4 py-3 text-right">
@@ -108,7 +115,7 @@ export default function DashboardPanel({ state, setState }: Props) {
             </div>
           </div>
           <div className="grid gap-3 p-5 sm:grid-cols-3 sm:p-6">
-            <Metric label="实际持仓" value={money(holdingsValue)} hint={`${state.holdings.length} 只证券`} />
+            <Metric label="持仓参考市值" value={money(holdingsValue)} hint={`${state.holdings.length} 只证券 · 有股数按真实报价估值`} />
             <Metric label="持仓浮盈亏" value={money(holdingsPnl)} hint="按手动录入成本" tone={holdingsPnl >= 0 ? "good" : "danger"} />
             <Metric label="当前回撤" value={`${risk.drawdownPct.toFixed(1)}%`} hint={`峰值 ${money(state.profile.peakAssets)}`} tone={risk.drawdownPct >= 18 ? "danger" : risk.drawdownPct >= 10 ? "warn" : "good"} />
           </div>
@@ -192,11 +199,13 @@ export default function DashboardPanel({ state, setState }: Props) {
         </Card>
       </div>
 
+      <BrokerReadonly state={recordedState} setState={setState} />
       <Card>
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">实际持仓</h2>
-            <p className="mt-1 text-sm text-slate-500">手动记录真实持仓；本系统不会连接券商或自动下单。</p>
+            <p className="mt-1 text-sm text-slate-500">已导入股数的持仓按腾讯真实报价估值，其余为手工快照。总资产和资金仍以券商查询为准。</p>
+            <p className="mt-1 text-xs text-slate-400">{quotes.error || (quotes.data ? `行情获取于${new Date(quotes.data.fetched_at).toLocaleString("zh-CN")}` : "尚无最新报价，市值为已录入快照")}</p>
           </div>
           <button className={buttonClass} onClick={() => setShowHoldingForm((show) => !show)}>
             {showHoldingForm ? "收起" : "添加持仓"}
@@ -209,6 +218,7 @@ export default function DashboardPanel({ state, setState }: Props) {
             <Field label="名称"><input className={inputClass} value={holding.name} onChange={(e) => setHolding({ ...holding, name: e.target.value })} /></Field>
             <Field label="当前市值"><input className={inputClass} type="number" value={holding.marketValue || ""} onChange={(e) => setHolding({ ...holding, marketValue: Number(e.target.value) })} /></Field>
             <Field label="持仓成本"><input className={inputClass} type="number" value={holding.cost || ""} onChange={(e) => setHolding({ ...holding, cost: Number(e.target.value) })} /></Field>
+            <Field label="持仓股数（填写后按报价估值）"><input className={inputClass} type="number" min="0" step="1" value={holding.quantity || ""} onChange={(e) => setHolding({ ...holding, quantity: Number(e.target.value) })} /></Field>
             <Field label="一句话逻辑"><input className={inputClass} value={holding.thesis} onChange={(e) => setHolding({ ...holding, thesis: e.target.value })} /></Field>
             <button className={`${buttonClass} md:col-span-2 xl:col-span-5`} onClick={addHolding}>保存持仓</button>
           </div>

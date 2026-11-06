@@ -5,6 +5,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 
 import { api, type FundAnalysis, type FundListing, type FundNavPoint } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import LiveQuotes from "../live-quotes";
 
 const ALERT_CLASS: Record<string, string> = {
   normal: "bg-gray-50 text-gray-600",
@@ -14,7 +15,7 @@ const ALERT_CLASS: Record<string, string> = {
 
 export default function FundModule() {
   const { t } = useLocale();
-  const [code, setCode] = useState("513330");
+  const [code, setCode] = useState("510300");
   const [funds, setFunds] = useState<FundListing[]>([]);
   const [nav, setNav] = useState<FundNavPoint[]>([]);
   const [analysis, setAnalysis] = useState<FundAnalysis | null>(null);
@@ -55,6 +56,7 @@ export default function FundModule() {
 
   return (
     <main className="max-w-5xl mx-auto p-10">
+      <LiveQuotes codes={[code]} />
       <h1 className="text-2xl font-medium">{t("fund.title")}</h1>
       <p className="text-sm text-gray-500 mt-1">{t("fund.desc")}</p>
 
@@ -96,6 +98,7 @@ export default function FundModule() {
                 {analysis.premium.price.toFixed(3)} / IOPV {analysis.premium.iopv.toFixed(3)})
               </div>
               <div className="mt-0.5">{analysis.premium.alert_message}</div>
+              <div className="mt-1 text-xs">IOPV快照时间：{analysis.premium.quote_time ? new Date(analysis.premium.quote_time).toLocaleString("zh-CN") : "供应商未提供"}，点击加载可重新获取。</div>
             </div>
           )}
 

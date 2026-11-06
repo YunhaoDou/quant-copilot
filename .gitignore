@@ -33,6 +33,12 @@ build/
 
 # Local data / generated
 data/
+!backend/data/
+backend/data/*
+!backend/data/cycle/
+backend/data/cycle/*
+!backend/data/cycle/daily.csv
+!backend/data/cycle/intraday.csv
 *.sqlite
 *.db
 generated/

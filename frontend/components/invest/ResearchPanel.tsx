@@ -5,6 +5,7 @@ import type { Dispatch, SetStateAction } from "react";
 
 import { makeId, PersonalInvestmentState, ResearchNote } from "@/lib/personal-investment";
 import { buttonClass, Card, Empty, Field, inputClass, secondaryButtonClass } from "./ui";
+import LiveQuotes from "./live-quotes";
 
 type Props = {
   state: PersonalInvestmentState;
@@ -91,6 +92,7 @@ export default function ResearchPanel({ state, setState }: Props) {
               >删除档案</button>
             </div>
 
+            <div className="mt-5"><LiveQuotes codes={[selected.code]} /></div>
             <div className="mt-5 grid gap-4 lg:grid-cols-2">
               <LongField label="商业模式" value={selected.businessModel} onChange={(value) => update("businessModel", value)} placeholder="谁付钱、为什么付钱、公司如何获得现金流？" />
               <LongField label="财务趋势" value={selected.financialTrend} onChange={(value) => update("financialTrend", value)} placeholder="收入、扣非利润、现金流、ROE、负债和关键异常。" />

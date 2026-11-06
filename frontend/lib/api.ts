@@ -258,6 +258,7 @@ export type FundAnalysis = {
     window_days: number;
   };
   premium: {
+    quote_time?: string | null;
     price: number;
     iopv: number;
     premium_rate: number;

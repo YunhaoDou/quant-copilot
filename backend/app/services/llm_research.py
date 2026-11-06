@@ -67,7 +67,15 @@ async def get_research_note(
     redis: Redis, ticker: str, client: LLMClient | None = None, lang: str = DEFAULT_LANG
 ) -> dict:
     """Returns a schema-validated research-note dict. Reads/writes the Redis cache."""
-    cached = await redis.get(_cache_key(ticker, lang))
+    mainland = ticker.upper().endswith((".SS", ".SZ", ".SH", ".BJ")) or ticker.isdigit()
+    context = None
+    if mainland and client is None:
+        from app.cycle.market import fetch_quotes
+        context = fetch_quotes([ticker])
+        if not context["quotes"]:
+            raise ValueError("未获取真实报价，无法生成有行情依据的研究笔记")
+    cache_key = _cache_key(ticker, lang) + (":market-v1:" + context["quotes"][0]["quote_time"][:10] if context else "")
+    cached = await redis.get(cache_key)
     if cached:
         note = json.loads(cached)
         note.update(cache_hit=True, retries=0, input_tokens=0, output_tokens=0)
@@ -76,6 +84,8 @@ async def get_research_note(
     client = client or LLMClient()
     system_prompt = SYSTEM_PROMPT + language_instruction(lang)
     prompt = f"Ticker: {ticker}\nProduce the research note JSON now."
+    if context:
+        prompt += "\n真实报价上下文：" + json.dumps(context, ensure_ascii=False) + "\n仅引用提供的已验证数字。缺少财务证据时明确说明待核实，估值只能作为假设，不得编造实时财报和消息。"
     last_error: Exception | None = None
 
     for attempt in range(MAX_RETRIES + 1):
@@ -93,7 +103,9 @@ async def get_research_note(
 
         note = validated.model_dump()
         note["model"] = MODEL
-        await redis.set(_cache_key(ticker, lang), json.dumps(note), ex=settings.LLM_CACHE_TTL_HOURS * 3600)
+        if context:
+            note["market_context"] = context
+        await redis.set(cache_key, json.dumps(note), ex=settings.LLM_CACHE_TTL_HOURS * 3600)
         note.update(cache_hit=False, retries=attempt, input_tokens=input_tokens, output_tokens=output_tokens)
         return note
 

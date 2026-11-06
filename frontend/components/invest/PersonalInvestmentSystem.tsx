@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { INVESTMENT_VIEW_EVENT, INVESTMENT_VIEWS, InvestmentView, navigateInvestmentView, readInvestmentView } from "@/lib/invest-navigation";
 
 import DashboardPanel from "./DashboardPanel";
+import dynamic from "next/dynamic";
+const CyclePanel = dynamic(() => import("./cycle-panel"), { loading: () => <div>正在载入情绪周期…</div> });
 import FunctionCenterPanel from "./FunctionCenterPanel";
 import JournalPanel from "./JournalPanel";
 import MarketRadarPanel from "./MarketRadarPanel";
@@ -12,6 +14,7 @@ import ResearchPanel from "./ResearchPanel";
 import ToolsPanel from "./ToolsPanel";
 import { usePersonalInvestment } from "./usePersonalInvestment";
 import WatchlistPanel from "./WatchlistPanel";
+import LiveQuotes from "./live-quotes";
 
 export default function PersonalInvestmentSystem() {
   const [tab, setTab] = useState<InvestmentView>("dashboard");
@@ -80,8 +83,10 @@ export default function PersonalInvestmentSystem() {
         </nav>
 
         <div className="mt-5">
+          {tab !== "cycle" && <div className="mb-5"><LiveQuotes /></div>}
           {tab === "dashboard" && <DashboardPanel state={state} setState={setState} />}
           {tab === "market" && <MarketRadarPanel state={state} setState={setState} />}
+          {tab === "cycle" && <CyclePanel />}
           {tab === "watchlist" && <WatchlistPanel state={state} setState={setState} />}
           {tab === "research" && <ResearchPanel state={state} setState={setState} />}
           {tab === "tools" && <ToolsPanel totalAssets={state.profile.currentAssets} />}

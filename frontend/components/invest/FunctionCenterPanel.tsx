@@ -13,8 +13,8 @@ const FundModule = dynamic(() => import("./modules/FundModule"), { loading });
 const BacktestModule = dynamic(() => import("./modules/BacktestModule"), { loading });
 const AiResearchModule = dynamic(() => import("./modules/AiResearchModule"), { loading });
 const PaperModule = dynamic(() => import("./modules/PaperModule"), { loading });
-const SimulationModule = dynamic(() => import("./modules/SimulationModule"), { loading });
-const AllocationModule = dynamic(() => import("./modules/AllocationModule"), { loading });
+const SimulationModule = dynamic(() => import("./modules/live-strategy-lab"), { loading });
+const AllocationModule = dynamic(() => import("./modules/live-allocation"), { loading });
 const ComplianceModule = dynamic(() => import("./modules/ComplianceModule"), { loading });
 const SettingsModule = dynamic(() => import("./modules/SettingsModule"), { loading });
 
@@ -28,8 +28,8 @@ const TOOLS: { id: ToolId; label: string; description: string; group: string; le
   { id: "research", label: "AI研究", description: "投资逻辑、催化剂、风险与估值", group: "研究" },
   { id: "paper", label: "模拟交易", description: "模拟账户、订单、持仓和风控", group: "执行" },
   { id: "settings", label: "系统设置", description: "模型密钥、后端地址与缓存", group: "系统" },
-  { id: "sim", label: "旧策略模拟", description: "原SPY基准策略实验结果", group: "待A股化", legacy: true },
-  { id: "allocation", label: "旧宏观配置", description: "原美国市场股债配置模型", group: "待A股化", legacy: true },
+  { id: "sim", label: "A股策略实验", description: "真实A股日线与四策略对比", group: "研究" },
+  { id: "allocation", label: "股债趋势", description: "沪深300与国债ETF真实趋势", group: "研究" },
   { id: "compliance", label: "旧合规问答", description: "原美国交易规则知识库", group: "待A股化", legacy: true },
 ];
 
@@ -66,7 +66,7 @@ export default function FunctionCenterPanel() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">统一功能中心</p>
             <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">所有研究工具都在个人投资系统内</h2>
-            <p className="mt-1 text-sm text-slate-500">优先使用A股行情、选股、基金、回测、研究和模拟交易；旧美国市场模块仅为迁移期间保留。</p>
+            <p className="mt-1 text-sm text-slate-500">行情、基金、策略实验与股债趋势使用真实市场数据；规则问答无需行情，旧合规模块单独标记适用市场。</p>
           </div>
           <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs ${backendHealth === "healthy" ? "bg-emerald-50 text-emerald-700" : backendHealth === "unavailable" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-500"}`}>
             <i className={`h-2 w-2 rounded-full ${backendHealth === "healthy" ? "bg-emerald-500" : backendHealth === "unavailable" ? "bg-red-500" : "bg-slate-400"}`} />

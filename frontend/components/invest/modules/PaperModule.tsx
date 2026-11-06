@@ -11,6 +11,7 @@ import {
   type RiskSnapshot,
 } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import LiveQuotes from "../live-quotes";
 
 const money = (n: number) =>
   n.toLocaleString("zh-CN", { style: "currency", currency: "CNY", maximumFractionDigits: 2 });
@@ -113,6 +114,7 @@ export default function PaperModule() {
 
   return (
     <main className="max-w-5xl mx-auto p-10">
+      <LiveQuotes codes={[symbol]} />
       <h1 className="text-2xl font-medium">{t("paper.title")}</h1>
       <p className="text-sm text-gray-500 mt-1">{t("paper.desc")}</p>
       <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">当前撮合器按最新收盘价进行研究性模拟，尚未实现A股T+1、100股一手和涨跌停限制，请勿把结果视为真实可成交订单。</p>

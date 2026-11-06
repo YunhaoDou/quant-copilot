@@ -5,6 +5,7 @@ import type { Dispatch, SetStateAction } from "react";
 
 import { makeId, PersonalInvestmentState, WatchItem } from "@/lib/personal-investment";
 import { buttonClass, Card, Empty, Field, inputClass, secondaryButtonClass } from "./ui";
+import { useLiveQuotes } from "@/lib/live-market";
 
 type Props = {
   state: PersonalInvestmentState;
@@ -29,10 +30,15 @@ export default function WatchlistPanel({ state, setState }: Props) {
   const [showAdd, setShowAdd] = useState(false);
   const [view, setView] = useState<"table" | "cards">("cards");
   const [filter, setFilter] = useState("全部");
+  const quotes = useLiveQuotes(state.watchlist.map(item => item.code));
+  const liveItems = state.watchlist.map(item => {
+    const q = quotes.data?.quotes.find(quote => quote.code === item.code.replace(/\D/g, "").slice(0, 6));
+    return q ? { ...item, price: q.price, pe: q.pe ?? 0 } : { ...item, price: 0, pe: 0 };
+  });
 
   const visible = useMemo(
-    () => state.watchlist.filter((item) => filter === "全部" || item.status === filter),
-    [filter, state.watchlist],
+    () => liveItems.filter((item) => filter === "全部" || item.status === filter),
+    [filter, liveItems],
   );
 
   function addItem() {
@@ -62,7 +68,7 @@ export default function WatchlistPanel({ state, setState }: Props) {
       {showAdd && <Card>
         <div>
           <h2 className="text-lg font-semibold">添加A股观察对象</h2>
-          <p className="mt-1 text-sm text-slate-500">数据目前由你手动维护；这样不会把延迟行情误当实时价格。</p>
+          <p className="mt-1 text-sm text-slate-500">现价与动态PE由行情源读取；股息率、财务质量和观察区间由你研究维护。</p>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Field label="股票代码"><input className={inputClass} value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })} placeholder="如 601668" /></Field>
@@ -87,7 +93,8 @@ export default function WatchlistPanel({ state, setState }: Props) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">观察池</h2>
-            <p className="mt-1 text-sm text-slate-500">低位仅表示价格位置，是否低估仍需结合盈利质量和估值判断。</p>
+            <p className="mt-1 text-sm text-slate-500">现价/动态PE：腾讯真实报价，每30秒刷新。股息率/质量：人工研究。</p>
+            <p className="mt-1 text-xs text-slate-400">{quotes.error || (quotes.data ? `获取于 ${new Date(quotes.data.fetched_at).toLocaleString("zh-CN")}，各证券时间以供应商为准` : "等待行情连接")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button className={buttonClass} onClick={() => setShowAdd((show) => !show)}>{showAdd ? "收起录入" : "添加公司"}</button>

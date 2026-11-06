@@ -67,6 +67,16 @@ def get_fund_name(code: str) -> str:
 
 def fetch_etf_history(code: str, start: str, end: str, fund_type: str) -> pd.DataFrame:
     """ETF/LOF daily close price -> DataFrame[nav_date, close]."""
+    from app.cycle.market import fetch_daily
+    raw = fetch_daily(code, 640, adjust="")
+    raw = raw.rename(columns={"trade_date": "nav_date"})
+    dates = pd.to_datetime(raw.nav_date)
+    raw = raw[(dates >= pd.to_datetime(start)) & (dates <= pd.to_datetime(end))]
+    return raw[["nav_date", "close"]].assign(nav_date=lambda df: pd.to_datetime(df.nav_date).dt.date)
+
+
+def _legacy_etf_history(code: str, start: str, end: str, fund_type: str) -> pd.DataFrame:
+    """旧东方财富历史适配，保留兼容接口。"""
     hist_fn = ak.fund_lof_hist_em if fund_type == FUND_TYPE_LOF else ak.fund_etf_hist_em
     raw = _retry(lambda: hist_fn(symbol=code, period="daily", start_date=start, end_date=end, adjust=""))
     if raw.empty:
@@ -94,7 +104,12 @@ async def ingest_fund(session: AsyncSession, code: str, start: str = "20230101")
     """Fetch full NAV/price history for `code` and upsert rows. Returns row count upserted."""
     code = code.strip()
     fund_type = detect_fund_type(code)
-    name = get_fund_name(code)
+    if fund_type in (FUND_TYPE_ETF, FUND_TYPE_LOF):
+        from app.cycle.market import fetch_quotes
+        quotes = fetch_quotes([code])["quotes"]
+        name = quotes[0]["name"] if quotes else code
+    else:
+        name = get_fund_name(code)
     end = datetime.now().strftime("%Y%m%d")
 
     if fund_type in (FUND_TYPE_ETF, FUND_TYPE_LOF):

@@ -16,6 +16,9 @@ export type Holding = {
   marketValue: number;
   cost: number;
   thesis: string;
+  quantity?: number;
+  broker?: string;
+  importedAt?: string;
 };
 
 export type WatchItem = {
@@ -56,6 +59,7 @@ export type DecisionEntry = {
   risks: string;
   exitCondition: string;
   lesson: string;
+  marketQuote?: { price: number; quoteTime: string; provider: string };
 };
 
 export type MarketEnvironment = {

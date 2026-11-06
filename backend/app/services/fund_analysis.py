@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import akshare as ak
 import numpy as np
 import pandas as pd
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services import fund_data
@@ -35,6 +36,7 @@ class PremiumSnapshot:
     premium_rate: float
     alert_level: str
     alert_message: str
+    quote_time: str | None = None
 
 
 def _assess_alert(premium_rate: float) -> tuple[str, str]:
@@ -51,27 +53,32 @@ def _assess_alert(premium_rate: float) -> tuple[str, str]:
 
 def get_premium_snapshot(code: str, fund_type: str) -> PremiumSnapshot | None:
     """Live premium/discount for an ETF/LOF. Returns None if IOPV isn't published for it."""
-    spot_fn = ak.fund_lof_spot_em if fund_type == "LOF" else ak.fund_etf_spot_em
-    df = fund_data._retry(spot_fn)
-    row = df[df["代码"] == code]
-    if row.empty:
+    from app.cycle.market import normalize_symbol
+    from app.cycle.live import number, TZ
+    from datetime import datetime
+    symbol = normalize_symbol(code)
+    secid = ("1." if symbol.startswith("sh") else "0.")+code
+    with httpx.Client(trust_env=False, timeout=8) as client:
+        response = client.get("https://push2.eastmoney.com/api/qt/ulist.np/get", params={"secids":secid, "fltt":2, "fields":"f12,f14,f2,f441,f124"})
+        response.raise_for_status()
+        rows = (response.json().get("data") or {}).get("diff", [])
+    if not rows:
         return None
-    r = row.iloc[0]
-    iopv = r.get("IOPV实时估值")
-    if iopv is None or pd.isna(iopv):
+    r = rows[0]
+    iopv, price = number(r.get("f441")), number(r.get("f2"))
+    if iopv is None or iopv <= 0 or price is None:
         return None
-    price = float(r["最新价"])
-    iopv = float(iopv)
     premium_rate = round((price - iopv) / iopv * 100, 4) if iopv else 0.0
     level, message = _assess_alert(premium_rate)
     return PremiumSnapshot(
         code=code,
-        name=str(r["名称"]),
+        name=str(r["f14"]),
         price=price,
         iopv=iopv,
         premium_rate=premium_rate,
         alert_level=level,
         alert_message=message,
+        quote_time=datetime.fromtimestamp(r["f124"], TZ).isoformat() if r.get("f124") else None,
     )
 
 
@@ -125,6 +132,7 @@ async def get_fund_analysis(session: AsyncSession, code: str, fund_type: str) ->
                 "premium_rate": snapshot.premium_rate,
                 "alert_level": snapshot.alert_level,
                 "alert_message": snapshot.alert_message,
+                "quote_time": snapshot.quote_time,
             }
 
     return {"code": code, "fund_type": fund_type, "metrics": metrics, "premium": premium}

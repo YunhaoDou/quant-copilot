@@ -4,9 +4,11 @@ import { useMemo, useState } from "react";
 
 import { positionShock, valuationScenarios } from "@/lib/personal-investment";
 import { Card, Field, inputClass, Metric, money, ProgressBar } from "./ui";
+import LiveQuotes from "./live-quotes";
 
 export default function ToolsPanel({ totalAssets }: { totalAssets: number }) {
   const [positionPct, setPositionPct] = useState(5);
+  const [referenceCode, setReferenceCode] = useState("600519");
   const [lossPct, setLossPct] = useState(20);
   const [valuation, setValuation] = useState({ currentEps: 2, years: 3, growthPct: 8, pe: 12, dividendYieldPct: 4 });
   const shock = useMemo(() => positionShock(totalAssets, positionPct, lossPct), [lossPct, positionPct, totalAssets]);
@@ -15,6 +17,8 @@ export default function ToolsPanel({ totalAssets }: { totalAssets: number }) {
   return (
     <div className="grid gap-5 xl:grid-cols-2">
       <Card>
+        <Field label="参考证券（真实报价，仅供设定情景）"><input className={inputClass} value={referenceCode} onChange={e => setReferenceCode(e.target.value)} /></Field>
+        <div className="my-4"><LiveQuotes codes={referenceCode.length >= 6 ? [referenceCode] : []} /></div>
         <div>
           <h2 className="text-lg font-semibold">仓位冲击模拟器</h2>
           <p className="mt-1 text-sm text-slate-500">拖动滑块，观察单只股票下跌对整个账户的真实影响。</p>

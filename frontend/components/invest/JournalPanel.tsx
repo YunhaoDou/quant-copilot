@@ -5,6 +5,8 @@ import type { Dispatch, SetStateAction } from "react";
 
 import { DecisionEntry, makeId, PersonalInvestmentState } from "@/lib/personal-investment";
 import { buttonClass, Card, Empty, Field, inputClass, money, secondaryButtonClass } from "./ui";
+import LiveQuotes from "./live-quotes";
+import { useLiveQuotes } from "@/lib/live-market";
 
 type Props = {
   state: PersonalInvestmentState;
@@ -27,11 +29,14 @@ const EMPTY: Omit<DecisionEntry, "id"> = {
 
 export default function JournalPanel({ state, setState }: Props) {
   const [draft, setDraft] = useState(EMPTY);
+  const quotes = useLiveQuotes(draft.code.length >= 6 ? [draft.code] : []);
   const [showForm, setShowForm] = useState(state.journal.length === 0);
 
   function save() {
     if (!draft.code.trim() || !draft.reason.trim()) return;
-    setState((current) => ({ ...current, journal: [{ ...draft, id: makeId("decision") }, ...current.journal] }));
+    const q = quotes.data?.quotes[0];
+    const marketQuote = q && q.quote_time.slice(0,10) === draft.date ? { price:q.price, quoteTime:q.quote_time, provider:quotes.data!.provider } : undefined;
+    setState((current) => ({ ...current, journal: [{ ...draft, marketQuote, id: makeId("decision") }, ...current.journal] }));
     setDraft({ ...EMPTY, date: today() });
     setShowForm(false);
   }
@@ -39,6 +44,7 @@ export default function JournalPanel({ state, setState }: Props) {
   return (
     <div className="space-y-5">
       {showForm && <Card>
+        {draft.code.length >= 6 && <LiveQuotes codes={[draft.code]} />}
         <div>
           <h2 className="text-lg font-semibold">记录一次投资决策</h2>
           <p className="mt-1 text-sm text-slate-500">先写证据和退出条件，再执行；复盘时保留原始理由，不事后改写。</p>
@@ -71,6 +77,7 @@ export default function JournalPanel({ state, setState }: Props) {
                 <div className="flex items-center gap-2"><span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-medium text-white">{item.action}</span><span className="font-semibold">{item.code}</span><span className="text-xs text-slate-400">{item.date}</span></div>
                 <div className="flex items-center gap-3"><span className="text-sm font-medium tabular-nums">{item.amount ? money(item.amount) : "未涉及资金"}</span><button className={secondaryButtonClass} onClick={() => setState((current) => ({ ...current, journal: current.journal.filter((entry) => entry.id !== item.id) }))}>删除</button></div>
               </div>
+              {item.marketQuote && <p className="mt-3 text-xs text-slate-400">当时留存报价：¥{item.marketQuote.price} · {new Date(item.marketQuote.quoteTime).toLocaleString("zh-CN")} · {item.marketQuote.provider}</p>}
               <div className="mt-4 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
                 <Block label="理由" value={item.reason} />
                 <Block label="证据" value={item.evidence} />

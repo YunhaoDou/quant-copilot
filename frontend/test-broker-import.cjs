@@ -1,0 +1,22 @@
+// 本地文件解析回归：不联网、不读取真实账户。
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const vm = require("node:vm");
+const ts = require("typescript");
+const source = fs.readFileSync("lib/broker-import.ts", "utf8");
+const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+const context = { exports: {}, Date, Set, Number, Error };
+vm.runInNewContext(code, context);
+const parse = context.exports.parseBrokerCSV;
+const rows = parse('\uFEFF证券代码,证券名称,持仓数量,成本价,市值\n000001,平安银行,100,10,"1,200"\n', "中国银河证券");
+assert.equal(rows[0].code, "000001");
+assert.equal(rows[0].quantity, 100);
+assert.equal(rows[0].cost, 1000);
+assert.equal(rows[0].marketValue, 1200);
+assert.equal(rows[0].broker, "中国银河证券");
+assert.equal(parse("股票代码\t股票名称\t股票余额\t成本金额\n600519\t贵州茅台\t100\t100000", "中信建投证券")[0].cost, 100000);
+assert.throws(() => parse("证券代码,证券名称\n000001,平安银行", "银河"), /需要列/);
+assert.throws(() => parse("证券代码,证券名称,持仓数量,成本价\n000001,平安银行,-1,10", "银河"), /非负整数/);
+assert.throws(() => parse("证券代码,证券名称,持仓数量,成本价\n000001,平安银行,100,10\n000001,平安银行,100,10", "银河"), /重复代码/);
+assert.throws(() => parse('证券代码,证券名称,持仓数量,成本价\n000001,"平安银行,100,10', "银河"), /引号未闭合/);
+console.log("券商导入：6组回归场景通过");

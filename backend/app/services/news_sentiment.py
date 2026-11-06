@@ -6,6 +6,9 @@ Chinese-market sources (华尔街见闻/新浪财经) don't apply here — this 
 US equities (see data_ingestion.py), so yfinance's own news feed is the in-scope source.
 """
 import json
+import re
+import time
+from curl_cffi import requests as news_requests
 
 import yfinance as yf
 from pydantic import ValidationError
@@ -34,6 +37,22 @@ def _cache_key(symbol: str, lang: str) -> str:
 
 
 def _fetch_headlines(symbol: str) -> list[dict]:
+    if symbol.upper().endswith((".SS", ".SZ", ".SH", ".BJ")) or symbol.isdigit():
+        code = re.sub(r"\D", "", symbol)[:6]
+        query = {"uid":"", "keyword":code, "type":["cmsArticleWebOld"], "client":"web", "clientType":"web", "clientVersion":"curr", "param":{"cmsArticleWebOld":{"searchScope":"default", "sort":"default", "pageIndex":1, "pageSize":MAX_HEADLINES, "preTag":"", "postTag":""}}}
+        callback = "jQuery35101792940631092459_1764599530165"
+        response = news_requests.get("https://search-api-web.eastmoney.com/search/jsonp", params={"cb":callback, "param":json.dumps(query, ensure_ascii=False), "_":str(int(time.time()*1000))}, headers={"User-Agent":"Mozilla/5.0", "Referer":"https://so.eastmoney.com/"}, timeout=10)
+        response.raise_for_status()
+        raw = response.text.strip()
+        if raw.startswith(callback+"("):
+            raw = raw[len(callback)+1:].rstrip(";\n ")[:-1]
+        if not raw:
+            raise ValueError("真实资讯接口返回空响应")
+        data = json.loads(raw)
+        rows = data.get("result", {}).get("cmsArticleWebOld", [])
+        if not isinstance(rows, list):
+            raise ValueError("真实A股资讯接口返回结构变化")
+        return [{"title":re.sub("<[^>]+>", "", row.get("title", "")), "summary":re.sub("<[^>]+>", "", row.get("content", ""))[:500], "published_at":row.get("date"), "publisher":row.get("mediaName", "东方财富资讯"), "url":"https://finance.eastmoney.com/a/"+row["code"]+".html"} for row in rows if row.get("title") and row.get("code")]
     raw = yf.Ticker(symbol.upper()).news or []
     headlines = []
     for item in raw[:MAX_HEADLINES]:

@@ -5,6 +5,7 @@ import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, X
 
 import { api, type BacktestResult } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import LiveQuotes from "../live-quotes";
 
 const COLORS: Record<string, string> = {
   sma_crossover: "#2563eb",
@@ -34,6 +35,8 @@ export default function BacktestModule() {
 
   return (
     <main className="max-w-5xl mx-auto p-10">
+      <LiveQuotes codes={[symbol]} />
+      <p className="my-3 text-xs text-amber-700">回测使用已入库的真实前复权日线，不代表实际可成交收益；运行前请在行情模块更新历史数据。</p>
       <h1 className="text-2xl font-medium">{t("backtest.title")}</h1>
       <p className="text-sm text-gray-500 mt-1">{t("backtest.desc")}</p>
 

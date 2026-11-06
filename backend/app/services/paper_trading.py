@@ -21,6 +21,13 @@ class OrderError(ValueError):
 
 async def latest_price(session: AsyncSession, symbol: str) -> float | None:
     """Most recent ingested close for a symbol, or None if no price data."""
+    if symbol.upper().endswith((".SS", ".SZ", ".SH", ".BJ")) or symbol.isdigit():
+        from app.cycle.market import fetch_quotes
+        from starlette.concurrency import run_in_threadpool
+        payload = await run_in_threadpool(fetch_quotes, [symbol])
+        if not payload["quotes"]:
+            raise OrderError("真实报价不可用，不使用旧收盘价冒充当前价")
+        return payload["quotes"][0]["price"]
     result = await session.execute(
         select(Price.close)
         .where(Price.ticker_symbol == symbol)
