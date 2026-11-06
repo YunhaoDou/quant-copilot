@@ -8,10 +8,11 @@ import { useLocale } from "@/lib/i18n";
 
 export default function Navbar() {
   const [active, setActive] = useState<InvestmentView>("dashboard");
+  const [embedded, setEmbedded] = useState(false);
   const { locale, setLocale } = useLocale();
 
   useEffect(() => {
-    const sync = () => setActive(readInvestmentView());
+    const sync = () => { setActive(readInvestmentView()); setEmbedded(new URLSearchParams(window.location.search).get("embed") === "1"); };
     sync();
     window.addEventListener("popstate", sync);
     window.addEventListener(INVESTMENT_VIEW_EVENT, sync);
@@ -22,6 +23,8 @@ export default function Navbar() {
   }, []);
 
   const activeItem = INVESTMENT_VIEWS.find((item) => item.id === active) ?? INVESTMENT_VIEWS[0];
+
+  if (embedded) return null;
 
   return (
     <>

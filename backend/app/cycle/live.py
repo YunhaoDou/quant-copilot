@@ -87,11 +87,14 @@ def parse_tencent_minutes(payload, code, name, expected_date):
     return points
 
 
-def store_snapshot(snapshot, fetched_at, path=DB_PATH):
+def store_snapshot(snapshot, fetched_at, path=DB_PATH, details=None):
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path, timeout=10) as db:
         db.execute("CREATE TABLE IF NOT EXISTS snapshots (observed_at TEXT PRIMARY KEY, payload TEXT NOT NULL)")
         db.execute("INSERT OR REPLACE INTO snapshots VALUES (?, ?)", (fetched_at, json.dumps(snapshot, ensure_ascii=False, allow_nan=False)))
+        db.execute("CREATE TABLE IF NOT EXISTS snapshot_details (observed_at TEXT PRIMARY KEY, payload TEXT NOT NULL)")
+        if details is not None:
+            db.execute("INSERT OR REPLACE INTO snapshot_details VALUES (?, ?)", (fetched_at, json.dumps(details, ensure_ascii=False, allow_nan=False)))
 
 
 def read_history(limit, cutoff=None, path=DB_PATH):
@@ -107,6 +110,31 @@ def read_history(limit, cutoff=None, path=DB_PATH):
         args.append(limit)
         rows = db.execute(query, args).fetchall()
     return [dict(json.loads(payload), observed_at=stamp) for stamp, payload in reversed(rows)]
+
+
+def captured_dates(path=DB_PATH):
+    if not path.exists():
+        return []
+    with sqlite3.connect(path, timeout=10) as db:
+        return [r[0] for r in db.execute("SELECT DISTINCT substr(observed_at,1,10) FROM snapshots ORDER BY 1")]
+
+
+def replay_dashboard(config, as_of, path=DB_PATH):
+    cutoff = datetime.fromisoformat(as_of + "T23:59:59.999999+08:00" if len(as_of) == 10 else as_of)
+    if cutoff.tzinfo is None:
+        cutoff = cutoff.replace(tzinfo=TZ)
+    history = read_history(config["live_history_limit"], cutoff.astimezone(TZ).isoformat(), path)
+    current = history[-1] if history else None
+    details = {}
+    if current and path.exists():
+        with sqlite3.connect(path, timeout=10) as db:
+            exists = db.execute("SELECT 1 FROM sqlite_master WHERE name='snapshot_details'").fetchone()
+            row = db.execute("SELECT payload FROM snapshot_details WHERE observed_at=?", (current["observed_at"],)).fetchone() if exists else None
+            details = json.loads(row[0]) if row else {}
+    metadata = details.get("metadata", {})
+    metadata.update(replay=True, fetched_at=current["observed_at"] if current else cutoff.isoformat(), quote_time=metadata.get("quote_time"), quote_age_seconds=None, refresh_seconds=0, stale=False, session="已采集历史回放", indices=metadata.get("indices", []), feeds=metadata.get("feeds", {}), warnings=["仅回放截止所选日期已实际采集的快照，不补造历史。"] + ([] if details else ["早期快照未留存分钟路径和供应商时间，只能回放当时已保存的指标。忽略缺失值，不以当前行情替代。"]), provider=metadata.get("provider", "已采集真实快照"))
+    return dict(source="akshare", simulated=False, config=config, dates=captured_dates(path), current=current, history=history, intraday=details.get("intraday", []), metadata=metadata,
+        backtest=dict(events=[], summary=dict(samples=0,signals=0,win_rate=None,mean=None,median=None), simulation=dict(trades=[],curve=[],max_drawdown=None,final_equity=None)))
 
 
 class LiveDataProvider:
@@ -235,8 +263,8 @@ class LiveDataProvider:
                 card=dict(pattern={"启动":"启动龙头", "退潮":"退潮回避", "冰点":"冰点龙头", "分歧":"冲高回落风险"}.get(state,"持续观察"), state=state, action="回避" if high_risk else "观察", checks={"板块启动": any(s["started"] for s in sectors) if sectors else None, "跌停数低于风险阈值": not high_risk if down_count is not None else None, "昨日涨停表现为正": mean > 0 if mean is not None else None}, invalidation="跌停扩散、板块启动条件消失或数据过期时重新核实。", risk="盘中候选，不代表收盘确认；股票池无秒级供应商时间戳。"), rule_version=self.config["rule_version"])
             fetched = datetime.now(TZ)
             metadata = dict(provider="腾讯公开行情 / 东方财富公开行情", fetched_at=fetched.isoformat(), quote_time=quote["timestamp"], refresh_seconds=self.config["live_refresh_seconds"], feeds=feeds, warnings=warnings + ["股票池仅有数据日期，秒级延迟未知；行业名称精确匹配，分类不一致可能低估板块涨停家数。", "仅展示已采集的真实历史；未接入历史成分和完整日线，真实行情回测暂不可用。"], indices=quotes)
-            store_snapshot(snapshot, fetched.isoformat())
-            return dict(source="akshare", simulated=False, config=self.config, dates=[date], current=snapshot, history=read_history(self.config["live_history_limit"]), intraday=minutes, metadata=metadata,
+            store_snapshot(snapshot, fetched.isoformat(), details={"metadata":metadata, "intraday":minutes})
+            return dict(source="akshare", simulated=False, config=self.config, dates=captured_dates(), current=snapshot, history=read_history(self.config["live_history_limit"]), intraday=minutes, metadata=metadata,
                 backtest=dict(events=[], summary=dict(samples=0,signals=0,win_rate=None,mean=None,median=None), simulation=dict(trades=[],curve=[],max_drawdown=None,final_equity=None)))
         finally:
             self.client.close()
@@ -244,7 +272,7 @@ class LiveDataProvider:
 
 def live_dashboard(config, as_of=None):
     if as_of:
-        raise ValueError("真实行情入口仅显示当前快照；历史回放请使用已采集快照或CSV，不使用当前数据补历史")
+        return replay_dashboard(config, as_of)
     key = json.dumps(config, sort_keys=True)
     with _lock:
         if key in _cache and monotonic()-_cache[key][0] < config["live_cache_seconds"]:

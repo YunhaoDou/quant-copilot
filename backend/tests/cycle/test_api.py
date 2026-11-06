@@ -16,7 +16,8 @@ def test_offline_dashboard_and_backtest():
 
 
 def test_provider_errors_and_bad_horizon():
-    assert client.get("/cycle?source=akshare&as_of=2026-01-01").status_code == 422
+    replay = client.get("/cycle?source=akshare&as_of=2020-01-01")
+    assert replay.status_code == 200 and replay.json()["current"] is None
     assert client.get("/cycle?horizon=99").status_code == 422
 
 

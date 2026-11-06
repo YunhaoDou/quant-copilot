@@ -55,11 +55,25 @@ def test_partial_failure_keeps_missing_distinct_from_zero(monkeypatch):
     fields[1], fields[3], fields[30], fields[32], fields[33], fields[34], fields[37] = "上证指数", "3000", "20261106100000", "-1", "3100", "2900", "10000"
     quote = 'v_sh000001="' + "~".join(fields) + '";'
     transport = httpx.MockTransport(lambda request: httpx.Response(200, text=quote) if "qt.gtimg.cn" in str(request.url) else httpx.Response(503, text="上游不可用"))
-    monkeypatch.setattr(live, "store_snapshot", lambda *a: None)
+    monkeypatch.setattr(live, "store_snapshot", lambda *a, **kw: None)
     monkeypatch.setattr(live, "read_history", lambda *a: [])
+    monkeypatch.setattr(live, "captured_dates", lambda: [])
     result = live.LiveDataProvider(load_config(), transport=transport).fetch()
     assert result["simulated"] is False
     assert result["current"]["limit_up"] is None
     assert result["current"]["limit_down"] is None
     assert result["current"]["state"] == "数据不足"
     assert result["metadata"]["warnings"]
+
+
+def test_replay_uses_only_saved_data_and_retains_minutes(tmp_path):
+    path = tmp_path / "replay.sqlite"
+    snapshot = {"date":"2026-11-06", "state":"启动"}
+    live.store_snapshot(snapshot, "2026-11-06T10:00:00+08:00", path, details={"intraday":[{"time":"09:59","price":10}], "metadata":{"quote_time":"2026-11-06T09:59:00+08:00"}})
+    live.store_snapshot({**snapshot,"state":"退潮"}, "2026-11-06T11:00:00+08:00", path)
+    result = live.replay_dashboard(load_config(), "2026-11-06T10:30:00+08:00", path)
+    assert result["current"]["state"] == "启动"
+    assert result["intraday"][0]["price"] == 10
+    assert result["metadata"]["replay"] is True
+    assert result["metadata"]["refresh_seconds"] == 0
+    assert live.replay_dashboard(load_config(), "2020-01-01", path)["current"] is None

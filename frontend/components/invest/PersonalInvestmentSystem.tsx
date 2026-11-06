@@ -7,6 +7,7 @@ import { INVESTMENT_VIEW_EVENT, INVESTMENT_VIEWS, InvestmentView, navigateInvest
 import DashboardPanel from "./DashboardPanel";
 import dynamic from "next/dynamic";
 const CyclePanel = dynamic(() => import("./cycle-panel"), { loading: () => <div>正在载入情绪周期…</div> });
+const DividendPanel = dynamic(() => import("./dividend-panel"), { loading: () => <div>正在载入红利看板…</div> });
 import FunctionCenterPanel from "./FunctionCenterPanel";
 import JournalPanel from "./JournalPanel";
 import MarketRadarPanel from "./MarketRadarPanel";
@@ -18,10 +19,11 @@ import LiveQuotes from "./live-quotes";
 
 export default function PersonalInvestmentSystem() {
   const [tab, setTab] = useState<InvestmentView>("dashboard");
+  const [embedded, setEmbedded] = useState(false);
   const { state, setState, ready, reset } = usePersonalInvestment();
 
   useEffect(() => {
-    const sync = () => setTab(readInvestmentView());
+    const sync = () => { setTab(readInvestmentView()); setEmbedded(new URLSearchParams(window.location.search).get("embed") === "1"); };
     sync();
     window.addEventListener("popstate", sync);
     window.addEventListener(INVESTMENT_VIEW_EVENT, sync);
@@ -39,6 +41,8 @@ export default function PersonalInvestmentSystem() {
   if (!ready) {
     return <div className="mx-auto max-w-7xl px-6 py-16 text-sm text-slate-500">正在载入个人投资系统…</div>;
   }
+
+  if (embedded && tab === "dividends") return <main className="bg-[#f4f6f2] p-4"><style>{"body { padding: 0 !important; }"}</style><DividendPanel /></main>;
 
   return (
     <main className="min-h-screen bg-[#f4f6f2] text-slate-800">
@@ -87,6 +91,7 @@ export default function PersonalInvestmentSystem() {
           {tab === "dashboard" && <DashboardPanel state={state} setState={setState} />}
           {tab === "market" && <MarketRadarPanel state={state} setState={setState} />}
           {tab === "cycle" && <CyclePanel />}
+          {tab === "dividends" && <DividendPanel />}
           {tab === "watchlist" && <WatchlistPanel state={state} setState={setState} />}
           {tab === "research" && <ResearchPanel state={state} setState={setState} />}
           {tab === "tools" && <ToolsPanel totalAssets={state.profile.currentAssets} />}

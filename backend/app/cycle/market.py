@@ -13,6 +13,7 @@ from app.cycle.engine import load_config
 
 router = APIRouter(prefix="/market", tags=["真实行情"])
 _cache = {}
+_daily_cache = {}
 _lock = Lock()
 
 
@@ -60,13 +61,15 @@ def fetch_daily(symbol, count=640, adjust="qfq"):
     code = normalize_symbol(symbol)
     count = max(30, min(640, int(count)))
     config = load_config()
-    key = f"history:{code}:{count}:{adjust}"
+    now = datetime.now(TZ)
+    # 收盘前后分别缓存，避免15点后沿用盘中剔除当日K线的结果。
+    key = f"history:{code}:{count}:{adjust}:{now.date()}:{now.hour >= 15}"
     with _lock:
-        cached = _cache.get(key)
-        if cached and monotonic()-cached[0] < config["live_cache_seconds"]:
+        cached = _daily_cache.get(key)
+        if cached and monotonic()-cached[0] < config["live_daily_cache_seconds"]:
             return cached[1].copy()
     with httpx.Client(trust_env=False, timeout=config["live_timeout_seconds"]) as client:
-        response = client.get("https://web.ifzq.gtimg.cn/appstock/app/fqkline/get", params={"param": f"{code},day,,,{count},{adjust}"})
+        response = client.get("https://web.ifzq.gtimg.cn/appstock/app/newfqkline/get", params={"param": f"{code},day,,,{count},{adjust}"})
         response.raise_for_status()
         data = response.json().get("data", {}).get(code, {})
     rows = data.get(adjust+"day", data.get("day", []))
@@ -78,7 +81,9 @@ def fetch_daily(symbol, count=640, adjust="qfq"):
     if now.strftime("%H:%M") < "15:00":
         frame = frame[frame.trade_date < now.date().isoformat()]
     with _lock:
-        _cache[key] = (monotonic(), frame.copy())
+        if len(_daily_cache) > 2000:
+            _daily_cache.clear()
+        _daily_cache[key] = (monotonic(), frame.copy())
     return frame
 
 
