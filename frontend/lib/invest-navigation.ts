@@ -1,11 +1,12 @@
-export type InvestmentView = "dashboard" | "market" | "cycle" | "dividends" | "watchlist" | "research" | "tools" | "journal" | "functions";
+export type InvestmentView = "dashboard" | "market" | "cycle" | "dividends" | "watchlist" | "research" | "tools" | "journal" | "functions" | "guide";
 
 export const INVESTMENT_VIEWS: { id: InvestmentView; label: string; shortLabel: string; description: string; group: "决策" | "工具" }[] = [
+  { id: "guide", label: "新手指南", shortLabel: "指南", description: "炒股基础与系统操作", group: "决策" },
   { id: "dashboard", label: "A股驾驶舱", shortLabel: "驾驶舱", description: "资产、持仓与回撤防线", group: "决策" },
   { id: "market", label: "市场雷达", shortLabel: "雷达", description: "市场事实、证据与候选", group: "决策" },
   { id: "cycle", label: "情绪周期", shortLabel: "周期", description: "主线、龙头与历史验证", group: "决策" },
   { id: "dividends", label: "红利看板", shortLabel: "红利", description: "真实分红、分类与价格位置", group: "决策" },
-  { id: "watchlist", label: "A股观察池", shortLabel: "观察池", description: "估值、股息与质量", group: "决策" },
+  { id: "watchlist", label: "A股观察池", shortLabel: "观察池", description: "公司跟踪、研究区间与待办", group: "决策" },
   { id: "research", label: "个股研究", shortLabel: "研究", description: "论证与失效条件", group: "决策" },
   { id: "tools", label: "模拟工具", shortLabel: "模拟", description: "仓位冲击与估值", group: "工具" },
   { id: "journal", label: "决策复盘", shortLabel: "复盘", description: "证据、退出与教训", group: "工具" },
@@ -24,11 +25,13 @@ export function readInvestmentView(): InvestmentView {
   return isInvestmentView(view) ? view : "dashboard";
 }
 
-export function navigateInvestmentView(view: InvestmentView) {
+export function navigateInvestmentView(view: InvestmentView, company?: string) {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
   url.pathname = "/invest";
+  url.hash = "";
   url.searchParams.set("view", view);
+  if (company) url.searchParams.set("company", company); else url.searchParams.delete("company");
   window.history.pushState({ view }, "", url);
   window.dispatchEvent(new CustomEvent(INVESTMENT_VIEW_EVENT, { detail: view }));
 }

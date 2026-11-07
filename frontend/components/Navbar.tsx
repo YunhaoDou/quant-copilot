@@ -66,7 +66,7 @@ export default function Navbar() {
         <div className="border-t border-slate-100 p-3">
           <div className="rounded-2xl border border-slate-200/80 bg-white p-3">
             <div className="flex items-center justify-between"><span className="text-xs font-medium text-slate-600">A股本地工作区</span><span className="h-2 w-2 rounded-full bg-emerald-500" /></div>
-            <p className="mt-1 text-[11px] leading-5 text-slate-400">人民币 · 20%回撤防线<br />数据保存在当前浏览器</p>
+            <p className="mt-1 text-[11px] leading-5 text-slate-400">人民币 · 回撤防线见驾驶舱<br />个人记录保存在当前浏览器</p>
           </div>
           <button className="mt-2 w-full rounded-xl px-3 py-2 text-xs font-medium text-slate-500 transition hover:bg-slate-100" onClick={() => setLocale(locale === "en" ? "zh" : "en")}>{locale === "en" ? "切换到中文" : "Switch to English"}</button>
         </div>

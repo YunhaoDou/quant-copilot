@@ -1,3 +1,4 @@
+import type { CompanyProfile, CompanyArchive } from "./company-store";
 export type AllocationKey = "stable" | "index" | "stocks" | "cash";
 
 export type InvestorProfile = {
@@ -102,6 +103,9 @@ export type PolicyEvidence = {
 };
 
 export type PersonalInvestmentState = {
+  companies?: Record<string, CompanyProfile>;
+  companySchemaVersion?: number;
+  companyLegacyArchive?: CompanyArchive;
   profile: InvestorProfile;
   holdings: Holding[];
   watchlist: WatchItem[];
@@ -115,6 +119,7 @@ export type PersonalInvestmentState = {
 export const STORAGE_KEY = "quant-copilot-personal-investment-v1";
 
 export const DEFAULT_STATE: PersonalInvestmentState = {
+  companies: {},
   profile: {
     initialCapital: 100_000,
     monthlyContribution: 5_000,
@@ -150,8 +155,8 @@ export function getDrawdownPct(peakAssets: number, currentAssets: number): numbe
   return ((peakAssets - currentAssets) / peakAssets) * 100;
 }
 
-export function getRiskStage(drawdownPct: number): RiskStage {
-  if (drawdownPct >= 20) {
+export function getRiskStage(drawdownPct: number, limit = 20): RiskStage {
+  if (drawdownPct >= limit) {
     return {
       level: "触线",
       color: "text-red-800",
@@ -159,7 +164,7 @@ export function getRiskStage(drawdownPct: number): RiskStage {
       instruction: "停止新增个股风险，复核全部持仓与资产配置，优先恢复风险预算。",
     };
   }
-  if (drawdownPct >= 18) {
+  if (drawdownPct >= limit * 0.9) {
     return {
       level: "防守",
       color: "text-red-700",
@@ -167,7 +172,7 @@ export function getRiskStage(drawdownPct: number): RiskStage {
       instruction: "股票总仓位降至约25%，只保留逻辑最强且流动性充足的仓位。",
     };
   }
-  if (drawdownPct >= 15) {
+  if (drawdownPct >= limit * 0.75) {
     return {
       level: "收缩",
       color: "text-orange-700",
@@ -175,7 +180,7 @@ export function getRiskStage(drawdownPct: number): RiskStage {
       instruction: "削减最弱逻辑和高相关仓位，暂停非计划加仓。",
     };
   }
-  if (drawdownPct >= 10) {
+  if (drawdownPct >= limit * 0.5) {
     return {
       level: "观察",
       color: "text-amber-700",
@@ -193,14 +198,16 @@ export function getRiskStage(drawdownPct: number): RiskStage {
 
 export function getRiskBudget(profile: InvestorProfile) {
   const drawdownPct = getDrawdownPct(profile.peakAssets, profile.currentAssets);
-  const maxLoss = profile.peakAssets * (profile.maxDrawdownPct / 100);
+  const limit = Math.min(100, Math.max(1, profile.maxDrawdownPct || 20));
+  const maxLoss = profile.peakAssets * (limit / 100);
   const currentLoss = Math.max(0, profile.peakAssets - profile.currentAssets);
   return {
     drawdownPct,
     maxLoss,
     currentLoss,
     remaining: Math.max(0, maxLoss - currentLoss),
-    stage: getRiskStage(drawdownPct),
+    limit,
+    stage: getRiskStage(drawdownPct, limit),
   };
 }
 

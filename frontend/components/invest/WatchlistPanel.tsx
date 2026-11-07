@@ -1,149 +1,29 @@
 "use client";
-
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-
-import { makeId, PersonalInvestmentState, WatchItem } from "@/lib/personal-investment";
-import { buttonClass, Card, Empty, Field, inputClass, secondaryButtonClass } from "./ui";
+import { PersonalInvestmentState } from "@/lib/personal-investment";
+import { CompanyInfo, openCompanyResearch, researchZone, upsertCompany } from "@/lib/company-store";
+import { useCompanyProfiles } from "@/lib/company-data";
 import { useLiveQuotes } from "@/lib/live-market";
+import { navigateInvestmentView } from "@/lib/invest-navigation";
+import { Card, Empty, Field, inputClass, secondaryButtonClass } from "./ui";
+import CompanyCodeEntry from "./CompanyCodeEntry";
+import CompanyKline from "./CompanyKline";
+import CompanyFacts,{currentDividend} from "./CompanyFacts";
+import CompanyArchiveNotice from "./CompanyArchiveNotice";
+type Props={state:PersonalInvestmentState;setState:Dispatch<SetStateAction<PersonalInvestmentState>>};
 
-type Props = {
-  state: PersonalInvestmentState;
-  setState: Dispatch<SetStateAction<PersonalInvestmentState>>;
-};
-
-const EMPTY_ITEM: Omit<WatchItem, "id"> = {
-  code: "",
-  name: "",
-  price: 0,
-  pe: 0,
-  dividendYield: 0,
-  qualityScore: 60,
-  targetLow: 0,
-  targetHigh: 0,
-  riskTags: "",
-  status: "观察",
-};
-
-export default function WatchlistPanel({ state, setState }: Props) {
-  const [draft, setDraft] = useState(EMPTY_ITEM);
-  const [showAdd, setShowAdd] = useState(false);
-  const [view, setView] = useState<"table" | "cards">("cards");
-  const [filter, setFilter] = useState("全部");
-  const quotes = useLiveQuotes(state.watchlist.map(item => item.code));
-  const liveItems = state.watchlist.map(item => {
-    const q = quotes.data?.quotes.find(quote => quote.code === item.code.replace(/\D/g, "").slice(0, 6));
-    return q ? { ...item, price: q.price, pe: q.pe ?? 0 } : { ...item, price: 0, pe: 0 };
-  });
-
-  const visible = useMemo(
-    () => liveItems.filter((item) => filter === "全部" || item.status === filter),
-    [filter, liveItems],
-  );
-
-  function addItem() {
-    if (!draft.code.trim() || !draft.name.trim()) return;
-    setState((current) => ({
-      ...current,
-      watchlist: [...current.watchlist, { ...draft, id: makeId("watch"), code: draft.code.trim() }],
-    }));
-    setDraft(EMPTY_ITEM);
-    setShowAdd(false);
-  }
-
-  function remove(id: string) {
-    setState((current) => ({ ...current, watchlist: current.watchlist.filter((item) => item.id !== id) }));
-  }
-
-  function zone(item: WatchItem) {
-    if (!item.price || !item.targetLow || !item.targetHigh) return { label: "待补数据", cls: "bg-slate-100 text-slate-600" };
-    if (item.price >= item.targetLow && item.price <= item.targetHigh) return { label: "进入观察区", cls: "bg-emerald-100 text-emerald-700" };
-    if (item.price < item.targetLow) return { label: "低于区间", cls: "bg-sky-100 text-sky-700" };
-    const distance = ((item.price - item.targetHigh) / item.targetHigh) * 100;
-    return { label: `高于区间 ${distance.toFixed(1)}%`, cls: distance > 20 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700" };
-  }
-
-  return (
-    <div className="space-y-5">
-      {showAdd && <Card>
-        <div>
-          <h2 className="text-lg font-semibold">添加A股观察对象</h2>
-          <p className="mt-1 text-sm text-slate-500">现价与动态PE由行情源读取；股息率、财务质量和观察区间由你研究维护。</p>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <Field label="股票代码"><input className={inputClass} value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })} placeholder="如 601668" /></Field>
-          <Field label="股票名称"><input className={inputClass} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
-          <Field label="当前价格"><input className={inputClass} type="number" step="0.01" value={draft.price || ""} onChange={(e) => setDraft({ ...draft, price: Number(e.target.value) })} /></Field>
-          <Field label="市盈率 PE"><input className={inputClass} type="number" step="0.1" value={draft.pe || ""} onChange={(e) => setDraft({ ...draft, pe: Number(e.target.value) })} /></Field>
-          <Field label="股息率 %"><input className={inputClass} type="number" step="0.1" value={draft.dividendYield || ""} onChange={(e) => setDraft({ ...draft, dividendYield: Number(e.target.value) })} /></Field>
-          <Field label="财务质量 0-100"><input className={inputClass} type="number" min="0" max="100" value={draft.qualityScore} onChange={(e) => setDraft({ ...draft, qualityScore: Number(e.target.value) })} /></Field>
-          <Field label="观察区间下限"><input className={inputClass} type="number" step="0.01" value={draft.targetLow || ""} onChange={(e) => setDraft({ ...draft, targetLow: Number(e.target.value) })} /></Field>
-          <Field label="观察区间上限"><input className={inputClass} type="number" step="0.01" value={draft.targetHigh || ""} onChange={(e) => setDraft({ ...draft, targetHigh: Number(e.target.value) })} /></Field>
-          <Field label="风险标签"><input className={inputClass} value={draft.riskTags} onChange={(e) => setDraft({ ...draft, riskTags: e.target.value })} placeholder="周期、高负债、股东减持" /></Field>
-          <Field label="研究状态">
-            <select className={inputClass} value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as WatchItem["status"] })}>
-              <option>观察</option><option>接近区间</option><option>已进入区间</option><option>排除</option>
-            </select>
-          </Field>
-        </div>
-        <button className={`${buttonClass} mt-4`} onClick={addItem}>加入观察池</button>
-      </Card>}
-
-      <Card>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">观察池</h2>
-            <p className="mt-1 text-sm text-slate-500">现价/动态PE：腾讯真实报价，每30秒刷新。股息率/质量：人工研究。</p>
-            <p className="mt-1 text-xs text-slate-400">{quotes.error || (quotes.data ? `获取于 ${new Date(quotes.data.fetched_at).toLocaleString("zh-CN")}，各证券时间以供应商为准` : "等待行情连接")}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button className={buttonClass} onClick={() => setShowAdd((show) => !show)}>{showAdd ? "收起录入" : "添加公司"}</button>
-            <select className={`${inputClass} w-auto`} value={filter} onChange={(e) => setFilter(e.target.value)}>
-              <option>全部</option><option>观察</option><option>接近区间</option><option>已进入区间</option><option>排除</option>
-            </select>
-            <button className={secondaryButtonClass} onClick={() => setView(view === "cards" ? "table" : "cards")}>{view === "cards" ? "表格视图" : "卡片视图"}</button>
-          </div>
-        </div>
-
-        {visible.length === 0 ? (
-          <div className="mt-4"><Empty>观察池为空。先录入你真正愿意持续跟踪的公司。</Empty></div>
-        ) : view === "cards" ? (
-          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {visible.map((item) => {
-              const location = zone(item);
-              return (
-                <article key={item.id} className="rounded-2xl border border-slate-200 p-5 transition hover:border-slate-300 hover:shadow-[0_12px_30px_rgba(15,23,42,0.06)]">
-                  <div className="flex items-start justify-between gap-3">
-                    <div><h3 className="font-semibold">{item.name}</h3><div className="text-xs text-slate-400">{item.code}</div></div>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${location.cls}`}>{location.label}</span>
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <Datum label="现价" value={item.price ? `¥${item.price.toFixed(2)}` : "—"} />
-                    <Datum label="PE" value={item.pe ? item.pe.toFixed(1) : "—"} />
-                    <Datum label="股息率" value={item.dividendYield ? `${item.dividendYield.toFixed(1)}%` : "—"} />
-                    <Datum label="财务质量" value={`${item.qualityScore}/100`} />
-                    <Datum label="目标区间" value={item.targetLow && item.targetHigh ? `¥${item.targetLow}–${item.targetHigh}` : "—"} />
-                    <Datum label="状态" value={item.status} />
-                  </div>
-                  <div className="mt-3 text-xs text-slate-500">风险：{item.riskTags || "尚未记录"}</div>
-                  <button className={`${secondaryButtonClass} mt-4 w-full`} onClick={() => remove(item.id)}>移除</button>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[850px] text-left text-sm">
-              <thead className="border-b text-xs uppercase tracking-wide text-slate-400"><tr><th className="py-2">公司</th><th>现价</th><th>PE</th><th>股息率</th><th>质量</th><th>目标区间</th><th>位置</th><th>风险</th><th /></tr></thead>
-              <tbody>{visible.map((item) => { const location = zone(item); return <tr key={item.id} className="border-b border-slate-100"><td className="py-3"><div className="font-medium">{item.name}</div><div className="text-xs text-slate-400">{item.code}</div></td><td>{item.price || "—"}</td><td>{item.pe || "—"}</td><td>{item.dividendYield ? `${item.dividendYield}%` : "—"}</td><td>{item.qualityScore}</td><td>{item.targetLow && item.targetHigh ? `${item.targetLow}–${item.targetHigh}` : "—"}</td><td><span className={`rounded-full px-2 py-1 text-xs ${location.cls}`}>{location.label}</span></td><td>{item.riskTags || "—"}</td><td><button className={secondaryButtonClass} onClick={() => remove(item.id)}>删除</button></td></tr>; })}</tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-function Datum({ label, value }: { label: string; value: string }) {
-  return <div><div className="text-xs text-slate-400">{label}</div><div className="mt-0.5 font-medium tabular-nums">{value}</div></div>;
+export default function WatchlistPanel({state,setState}:Props){
+ const companies=Object.values(state.companies||{}).filter(c=>c.inWatchlist),quotes=useLiveQuotes(companies.map(c=>c.code));
+ const errors=useCompanyProfiles(companies.map(c=>c.code),setState);
+ const [filter,setFilter]=useState("全部"),[table,setTable]=useState(false),[selected,setSelected]=useState<string|null>(null),[message,setMessage]=useState("");
+ useEffect(()=>{const code=new URLSearchParams(window.location.search).get("company");if(code)setSelected(code);},[]);
+ function research(code:string){setState(s=>openCompanyResearch(s,code));navigateInvestmentView("research",code);}
+ function add(info:CompanyInfo){const exists=state.companies?.[info.code]?.inWatchlist;setState(s=>upsertCompany(s,info,"watch"));setSelected(info.code);setMessage(exists?"已打开已有公司，未重复创建。":"已加入观察池。客观数据自动读取，研究区间和失效条件到研究页维护。");}
+ const visible=companies.filter(c=>{const q=quotes.data?.quotes.find(r=>r.code===c.code);return filter==="全部"||filter===c.trackingStatus||filter===researchZone(q?.price,c);});
+ const chosen=selected?state.companies?.[selected]:null;
+ return <div className="space-y-5"><Card><CompanyCodeEntry title="按代码加入A股观察池" action="加入观察池" existing={companies.map(c=>c.code)} onOpen={add}/>{message&&<p role="status" className="mt-3 text-sm text-emerald-800">{message}</p>}</Card><CompanyArchiveNotice archive={state.companyLegacyArchive}/>
+  <Card><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-semibold">我的观察池 · {companies.length}家公司</h2><p className="mt-1 text-sm text-slate-500">自动行情与分红、研究区间和失效条件共用一份公司档案。</p><p className="mt-2 text-xs text-slate-400">观察状态由你确认；是否进入区间由真实现价自动比较，不要求打质量分。</p></div><div className="flex flex-wrap items-end gap-2"><Field label="观察池筛选"><select className={inputClass} value={filter} onChange={e=>setFilter(e.target.value)}>{["全部","观察","排除","进入研究区间","未设研究区间"].map(v=><option key={v}>{v}</option>)}</select></Field><button className={secondaryButtonClass} onClick={()=>setTable(v=>!v)}>{table?"卡片视图":"表格视图"}</button></div></div>
+  {!visible.length?<div className="mt-5"><Empty>暂无符合筛选条件的公司。输入股票代码即可识别，不需要填写名称或报价。</Empty></div>:table?<div className="mt-5 overflow-x-auto"><table className="w-full min-w-[850px] text-left text-xs"><thead><tr>{["公司","现价 / 动态PE","已实施息率","研究区间（人工）","位置 / 跟踪","失效条件","操作"].map(t=><th className="border-b p-2" key={t}>{t}</th>)}</tr></thead><tbody>{visible.map(c=>{const q=quotes.data?.quotes.find(r=>r.code===c.code),d=currentDividend(c,q);return <tr key={c.code}><td className="border-b p-2"><button className="font-semibold text-emerald-800 underline" onClick={()=>setSelected(c.code)}>{c.name} {c.code}</button></td><td className="border-b p-2">{q?`${q.price.toFixed(2)} / ${q.pe?.toFixed(2)??"未知"}`:"未知"}</td><td className="border-b p-2">{d==null?"未知":`${d.toFixed(2)}%`}</td><td className="border-b p-2">{c.research.targetLow!=null?`${c.research.targetLow}–${c.research.targetHigh}`:"未设定"}</td><td className="border-b p-2">{researchZone(q?.price,c)} · {c.trackingStatus}</td><td className="max-w-xs border-b p-2">{c.research.invalidation||"待补充"}</td><td className="border-b p-2"><button className={secondaryButtonClass} onClick={()=>research(c.code)}>打开研究</button></td></tr>;})}</tbody></table></div>:<div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{visible.map(c=>{const q=quotes.data?.quotes.find(r=>r.code===c.code),d=currentDividend(c,q),todo=[!c.research.opened&&"建立投资论证",c.research.targetLow==null&&"设定研究区间",!c.research.invalidation&&"补充失效条件",!c.info?.dividend.verified&&"复核分红资料"].filter(Boolean);return <article id={`company-${c.code}`} key={c.code} className="min-w-0 rounded-2xl border border-slate-200 p-5"><button className="text-left" onClick={()=>setSelected(c.code)}><h3 className="font-semibold text-emerald-900 underline">{c.name}</h3><p className="mt-1 text-xs text-slate-400">{c.code} · {c.info?.industry||"行业未知"}</p></button><p className="mt-4 text-2xl font-semibold">{q?`¥${q.price.toFixed(2)}`:"行情未知"}</p><p className="mt-2 text-xs text-slate-500">动态PE {q?.pe?.toFixed(2)??"未知"} · 已实施股息率 {d==null?"未知":`${d.toFixed(2)}%`}</p><p className="mt-2 text-[10px] text-slate-400">腾讯报价 {q?new Date(q.quote_time).toLocaleString("zh-CN"):"等待更新"} · 分红口径 {c.info?.dividend.asOf||"未知"}</p><div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-6"><p>研究区间（人工）：{c.research.targetLow!=null?`¥${c.research.targetLow}–${c.research.targetHigh}`:"尚未设定"}</p><p>{researchZone(q?.price,c)} · 跟踪状态：{c.trackingStatus}</p><p className="mt-2 whitespace-pre-wrap break-words">失效条件：{c.research.invalidation||"到研究页补充"}</p><p className="mt-2 text-amber-800">待办：{todo.join("、")||"按计划复核证据与风险"}</p></div>{errors[c.code]&&<p className="mt-2 text-xs text-amber-800">公司资料更新失败，保留已标注日期的资料；缺失值不补造。</p>}<div className="mt-4 flex flex-wrap gap-2"><button className={secondaryButtonClass} onClick={()=>research(c.code)}>打开研究</button><button className={secondaryButtonClass} onClick={()=>setSelected(c.code)}>查看K线</button><button className="text-xs text-slate-500 underline" onClick={()=>{if(confirm("从观察池移除？公司研究和研究区间仍会保留。")){setState(s=>({...s,companies:{...s.companies,[c.code]:{...s.companies![c.code],inWatchlist:false}}}));if(selected===c.code)setSelected(null);}}}>移出观察池</button></div></article>;})}</div>}
+  </Card>{chosen&&<Card><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h3 className="text-xl font-semibold">{chosen.name} · {chosen.code}</h3><button className={secondaryButtonClass} onClick={()=>setSelected(null)}>收起公司详情</button></div><CompanyFacts company={chosen}/><div className="mt-5 border-t pt-5"><CompanyKline code={chosen.code}/></div><button className={`${secondaryButtonClass} mt-4`} onClick={()=>research(chosen.code)}>打开此公司研究</button></Card>}</div>;
 }

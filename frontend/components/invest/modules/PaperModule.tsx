@@ -116,7 +116,6 @@ export default function PaperModule() {
     <main className="max-w-5xl mx-auto p-10">
       <LiveQuotes codes={[symbol]} />
       <h1 className="text-2xl font-medium">{t("paper.title")}</h1>
-      <p className="text-sm text-gray-500 mt-1">{t("paper.desc")}</p>
       <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">A股模拟账户使用供应商最新报价；非A股旧账户使用已入库收盘价。尚未实现A股T+1、100股一手和涨跌停限制，请勿把结果视为真实可成交订单。</p>
 
       {/* Account selector + creation */}

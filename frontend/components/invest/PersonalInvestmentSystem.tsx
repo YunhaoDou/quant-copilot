@@ -9,6 +9,7 @@ import dynamic from "next/dynamic";
 const CyclePanel = dynamic(() => import("./cycle-panel"), { loading: () => <div>正在载入情绪周期…</div> });
 const DividendPanel = dynamic(() => import("./dividend-panel"), { loading: () => <div>正在载入红利看板…</div> });
 import FunctionCenterPanel from "./FunctionCenterPanel";
+import GuidePanel from "./GuidePanel";
 import JournalPanel from "./JournalPanel";
 import MarketRadarPanel from "./MarketRadarPanel";
 import ResearchPanel from "./ResearchPanel";
@@ -42,7 +43,7 @@ export default function PersonalInvestmentSystem() {
     return <div className="mx-auto max-w-7xl px-6 py-16 text-sm text-slate-500">正在载入个人投资系统…</div>;
   }
 
-  if (embedded && tab === "dividends") return <main className="bg-[#f4f6f2] p-4"><style>{"body { padding: 0 !important; }"}</style><DividendPanel /></main>;
+  if (embedded && tab === "dividends") return <main className="bg-[#f4f6f2] p-4"><style>{"body { padding: 0 !important; }"}</style><DividendPanel state={state} setState={setState} /></main>;
 
   return (
     <main className="min-h-screen bg-[#f4f6f2] text-slate-800">
@@ -64,11 +65,11 @@ export default function PersonalInvestmentSystem() {
             </div>
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-2 rounded-lg border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-50/90">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,0.12)]" />本地自动保存
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,0.12)]" />个人档案自动保存
               </span>
               <button
                 className="rounded-lg border border-white/15 px-3 py-2 text-xs text-white/70 transition duration-200 hover:border-white/25 hover:bg-white/10 hover:text-white"
-                onClick={() => { if (window.confirm("确认清空所有个人投资数据并恢复默认设置？")) reset(); }}
+                onClick={() => { if (window.confirm("确认重置当前浏览器内的驾驶舱、公司档案和决策复盘？情绪周期的人工确认与后端档案需分别管理。")) reset(); }}
               >恢复默认</button>
             </div>
           </div>
@@ -87,11 +88,12 @@ export default function PersonalInvestmentSystem() {
         </nav>
 
         <div className="mt-5">
-          {tab !== "cycle" && tab !== "market" && <div className="mb-5"><LiveQuotes /></div>}
+          {tab !== "cycle" && tab !== "market" && tab !== "guide" && <div className="mb-5"><LiveQuotes /></div>}
+          {tab === "guide" && <GuidePanel onNavigate={(view) => { selectTab(view); window.scrollTo(0, 0); }} />}
           {tab === "dashboard" && <DashboardPanel state={state} setState={setState} />}
           {tab === "market" && <MarketRadarPanel state={state} setState={setState} />}
           {tab === "cycle" && <CyclePanel />}
-          {tab === "dividends" && <DividendPanel />}
+          {tab === "dividends" && <DividendPanel state={state} setState={setState} />}
           {tab === "watchlist" && <WatchlistPanel state={state} setState={setState} />}
           {tab === "research" && <ResearchPanel state={state} setState={setState} />}
           {tab === "tools" && <ToolsPanel totalAssets={state.profile.currentAssets} />}
@@ -99,7 +101,7 @@ export default function PersonalInvestmentSystem() {
           {tab === "functions" && <FunctionCenterPanel />}
         </div>
 
-        <footer className="flex flex-wrap items-center justify-between gap-2 py-8 text-xs text-slate-400"><span>A股个人研究 · 数据保存在当前浏览器 · 不连接券商</span><span>仅用于研究与风险管理，不构成投资建议</span></footer>
+        <footer className="flex flex-wrap items-center justify-between gap-2 py-8 text-xs text-slate-500"><span>A股个人研究 · 个人档案保存在当前浏览器</span><span>仅用于研究与风险管理，不构成投资建议</span></footer>
       </div>
     </main>
   );

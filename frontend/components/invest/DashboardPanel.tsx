@@ -51,7 +51,7 @@ export default function DashboardPanel({ state: recordedState, setState }: Props
   function updateProfile(key: "initialCapital" | "monthlyContribution" | "peakAssets" | "currentAssets" | "maxDrawdownPct", value: number) {
     setState((current) => ({
       ...current,
-      profile: { ...current.profile, [key]: Math.max(0, value || 0) },
+      profile: { ...current.profile, [key]: key === "maxDrawdownPct" ? Math.min(100, Math.max(1, value || 1)) : Math.max(0, value || 0) },
     }));
   }
 
@@ -111,22 +111,22 @@ export default function DashboardPanel({ state: recordedState, setState }: Props
           <div className="grid gap-3 p-5 sm:grid-cols-3 sm:p-6">
             <Metric label="持仓参考市值" value={money(holdingsValue)} hint={`${state.holdings.length} 只证券 · 有股数按真实报价估值`} />
             <Metric label="持仓浮盈亏" value={money(holdingsPnl)} hint="按手动录入成本" tone={holdingsPnl >= 0 ? "good" : "danger"} />
-            <Metric label="当前回撤" value={`${risk.drawdownPct.toFixed(1)}%`} hint={`峰值 ${money(state.profile.peakAssets)}`} tone={risk.drawdownPct >= 18 ? "danger" : risk.drawdownPct >= 10 ? "warn" : "good"} />
+            <Metric label="当前回撤" value={`${risk.drawdownPct.toFixed(1)}%`} hint={`峰值 ${money(state.profile.peakAssets)}`} tone={risk.drawdownPct >= risk.limit * 0.9 ? "danger" : risk.drawdownPct >= risk.limit * 0.5 ? "warn" : "good"} />
           </div>
         </Card>
 
         <Card className={`${risk.stage.background} flex flex-col justify-between`}>
           <div>
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-slate-700">20% 回撤防线</p>
+              <p className="text-sm font-semibold text-slate-700">{risk.limit}% 回撤防线</p>
               <span className={`rounded-full bg-white/80 px-3 py-1 text-xs font-semibold ${risk.stage.color}`}>{risk.stage.level}</span>
             </div>
             <p className="mt-6 text-sm text-slate-500">剩余风险预算</p>
             <p className="mt-1 text-3xl font-semibold tracking-tight text-slate-950 tabular-nums">{money(risk.remaining)}</p>
             <p className="mt-2 text-xs text-slate-500">已消耗 {money(risk.currentLoss)} / 最大 {money(risk.maxLoss)}</p>
             <div className="mt-5">
-              <ProgressBar value={state.profile.maxDrawdownPct ? (risk.drawdownPct / state.profile.maxDrawdownPct) * 100 : 100} color={risk.drawdownPct >= 18 ? "bg-red-500" : risk.drawdownPct >= 10 ? "bg-amber-500" : "bg-emerald-500"} />
-              <div className="mt-2 flex justify-between text-[11px] text-slate-400"><span>0%</span><span>预警 10%</span><span>收缩 15%</span><span>防线 20%</span></div>
+              <ProgressBar value={risk.drawdownPct / risk.limit * 100} color={risk.drawdownPct >= risk.limit * 0.9 ? "bg-red-500" : risk.drawdownPct >= risk.limit * 0.5 ? "bg-amber-500" : "bg-emerald-500"} />
+              <div className="mt-2 flex flex-wrap justify-between gap-2 text-[11px] text-slate-500"><span>观察 {+(risk.limit * 0.5).toFixed(2)}%</span><span>收缩 {+(risk.limit * 0.75).toFixed(2)}%</span><span>防守 {+(risk.limit * 0.9).toFixed(2)}%</span><span>触线 {risk.limit}%</span></div>
             </div>
           </div>
           <div className="mt-6 rounded-2xl border border-white/80 bg-white/65 p-4">

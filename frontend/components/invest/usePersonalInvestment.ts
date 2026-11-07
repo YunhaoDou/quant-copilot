@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { migrateCompanies } from "@/lib/company-store";
 
 import {
   DEFAULT_STATE,
@@ -12,9 +13,9 @@ function loadState(): PersonalInvestmentState {
   if (typeof window === "undefined") return DEFAULT_STATE;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_STATE;
+    if (!raw) return migrateCompanies(DEFAULT_STATE);
     const saved = JSON.parse(raw) as Partial<PersonalInvestmentState>;
-    return {
+    return migrateCompanies({
       ...DEFAULT_STATE,
       ...saved,
       profile: {
@@ -34,7 +35,7 @@ function loadState(): PersonalInvestmentState {
         ...saved.marketEnvironment,
       },
       marketThemes: saved.marketThemes ?? [],
-    };
+    });
   } catch {
     return DEFAULT_STATE;
   }
@@ -47,13 +48,19 @@ export function usePersonalInvestment() {
   useEffect(() => {
     setState(loadState());
     setReady(true);
+    const sync = (event: StorageEvent) => { if (event.key === STORAGE_KEY && event.newValue) setState(loadState()); };
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
   }, []);
 
   useEffect(() => {
-    if (ready) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (ready) {
+      const value = JSON.stringify(state);
+      if (window.localStorage.getItem(STORAGE_KEY) !== value) window.localStorage.setItem(STORAGE_KEY, value);
+    }
   }, [ready, state]);
 
-  const reset = useCallback(() => setState(DEFAULT_STATE), []);
+  const reset = useCallback(() => setState(migrateCompanies(DEFAULT_STATE)), []);
 
   return { state, setState, ready, reset };
 }

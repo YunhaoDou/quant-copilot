@@ -26,11 +26,11 @@ const TOOLS: { id: ToolId; label: string; description: string; group: string; le
   { id: "ticker", label: "A股行情", description: "K线、成交量、资金流与新闻", group: "数据" },
   { id: "screening", label: "多因子选股", description: "动量、趋势、回撤与资金评分", group: "数据" },
   { id: "fund", label: "基金与ETF", description: "净值、折溢价、收益和风险", group: "数据" },
-  { id: "backtest", label: "策略回测", description: "四类策略的收益与回撤比较", group: "研究" },
-  { id: "research", label: "AI研究", description: "投资逻辑、催化剂、风险与估值", group: "研究" },
+  { id: "backtest", label: "策略回测", description: "用已入库日线比较四类策略与权益曲线", group: "研究" },
+  { id: "research", label: "AI研究", description: "一次性结构化笔记，与公司手工档案分开", group: "研究" },
   { id: "paper", label: "模拟交易", description: "模拟账户、订单、持仓和风控", group: "执行" },
-  { id: "settings", label: "系统设置", description: "模型密钥、后端地址与缓存", group: "系统" },
-  { id: "sim", label: "A股策略实验", description: "真实A股日线与四策略对比", group: "研究" },
+  { id: "settings", label: "系统设置", description: "AI研究与资讯的DeepSeek、后端地址与缓存", group: "系统" },
+  { id: "sim", label: "A股策略实验", description: "直接请求供应商日线，比较同一组四策略", group: "研究" },
   { id: "allocation", label: "股债趋势", description: "沪深300与国债ETF真实趋势", group: "研究" },
   { id: "compliance", label: "旧合规问答", description: "原美国交易规则知识库", group: "待A股化", legacy: true },
 ];
@@ -73,7 +73,7 @@ export default function FunctionCenterPanel() {
           </div>
           <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs ${backendHealth === "healthy" ? "bg-emerald-50 text-emerald-700" : backendHealth === "unavailable" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-500"}`}>
             <i className={`h-2 w-2 rounded-full ${backendHealth === "healthy" ? "bg-emerald-500" : backendHealth === "unavailable" ? "bg-red-500" : "bg-slate-400"}`} />
-            后端{backendHealth === "healthy" ? "正常" : backendHealth === "unavailable" ? "不可用" : "检查中"}
+            数据库{backendHealth === "healthy" ? "正常" : backendHealth === "unavailable" ? "状态不可用" : "检查中"}
           </span>
         </div>
         <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
