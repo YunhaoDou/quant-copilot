@@ -87,7 +87,7 @@ export default function PersonalInvestmentSystem() {
         </nav>
 
         <div className="mt-5">
-          {tab !== "cycle" && <div className="mb-5"><LiveQuotes /></div>}
+          {tab !== "cycle" && tab !== "market" && <div className="mb-5"><LiveQuotes /></div>}
           {tab === "dashboard" && <DashboardPanel state={state} setState={setState} />}
           {tab === "market" && <MarketRadarPanel state={state} setState={setState} />}
           {tab === "cycle" && <CyclePanel />}

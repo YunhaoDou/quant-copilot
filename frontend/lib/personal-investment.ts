@@ -74,13 +74,31 @@ export type MarketEnvironment = {
 export type MarketTheme = {
   id: string;
   name: string;
-  policy: number;
-  prosperity: number;
-  capital: number;
-  leadership: number;
-  catalyst: number;
+  /** 旧版评分仅保留作历史数据兼容，不再用于展示或仓位计算。 */
+  policy?: number;
+  prosperity?: number;
+  capital?: number;
+  leadership?: number;
+  catalyst?: number;
   thesis: string;
   risks: string;
+  status?: "关注" | "待核实" | "排除";
+  sectorCode?: string;
+  evidence?: string;
+  invalidation?: string;
+  updatedAt?: string;
+};
+
+export type PolicyEvidence = {
+  id: string;
+  title: string;
+  kind: "政策" | "产业";
+  publishedAt: string;
+  sourceName: string;
+  sourceUrl: string;
+  facts: string;
+  implication: string;
+  status: "待核实" | "已人工核对" | "不再适用";
 };
 
 export type PersonalInvestmentState = {
@@ -91,6 +109,7 @@ export type PersonalInvestmentState = {
   journal: DecisionEntry[];
   marketEnvironment: MarketEnvironment;
   marketThemes: MarketTheme[];
+  policyEvidence?: PolicyEvidence[];
 };
 
 export const STORAGE_KEY = "quant-copilot-personal-investment-v1";
@@ -118,27 +137,6 @@ export const DEFAULT_STATE: PersonalInvestmentState = {
   },
   marketThemes: [],
 };
-
-export function getMarketEnvironment(environment: MarketEnvironment) {
-  const score = Math.round(
-    ((environment.trend * 0.3 + environment.policy * 0.25 + environment.liquidity * 0.25 + environment.sentiment * 0.2) - 1) * 25,
-  );
-  if (score >= 70) return { score, label: "偏强", range: [65, 80] as const, tone: "text-emerald-700", action: "顺势参与主线，但保留现金并避免情绪高潮追高。" };
-  if (score >= 55) return { score, label: "均衡", range: [45, 65] as const, tone: "text-sky-700", action: "保持均衡仓位，只在证据充分的方向分批试仓。" };
-  if (score >= 40) return { score, label: "谨慎", range: [25, 45] as const, tone: "text-amber-700", action: "降低出手频率，等待趋势、资金和情绪形成共振。" };
-  return { score, label: "防守", range: [0, 25] as const, tone: "text-red-700", action: "以现金和稳健资产为主，不逆势扩大个股风险。" };
-}
-
-export function getThemeScore(theme: MarketTheme) {
-  return Math.round(((theme.policy * 0.2 + theme.prosperity * 0.25 + theme.capital * 0.2 + theme.leadership * 0.2 + theme.catalyst * 0.15) - 1) * 25);
-}
-
-export function getRiskAdjustedEquityCap(drawdownPct: number) {
-  if (drawdownPct >= 18) return 25;
-  if (drawdownPct >= 15) return 40;
-  if (drawdownPct >= 10) return 50;
-  return 80;
-}
 
 export type RiskStage = {
   level: "正常" | "观察" | "收缩" | "防守" | "触线";

@@ -6,10 +6,7 @@ import { useLiveQuotes } from "@/lib/live-market";
 import BrokerReadonly from "./broker-readonly";
 
 import {
-  DEFAULT_STATE,
-  getMarketEnvironment,
   getRiskBudget,
-  getRiskAdjustedEquityCap,
   makeId,
   PersonalInvestmentState,
 } from "@/lib/personal-investment";
@@ -50,9 +47,6 @@ export default function DashboardPanel({ state: recordedState, setState }: Props
   const holdingsValue = state.holdings.reduce((sum, item) => sum + item.marketValue, 0);
   const holdingsPnl = state.holdings.reduce((sum, item) => sum + item.marketValue - item.cost, 0);
   const monthlyAnnual = state.profile.monthlyContribution * 12;
-  const market = getMarketEnvironment(state.marketEnvironment ?? DEFAULT_STATE.marketEnvironment);
-  const equityCap = getRiskAdjustedEquityCap(risk.drawdownPct);
-  const marketPosition = equityCap < market.range[1] ? `≤ ${equityCap}%` : `${market.range[0]}%–${market.range[1]}%`;
 
   function updateProfile(key: "initialCapital" | "monthlyContribution" | "peakAssets" | "currentAssets" | "maxDrawdownPct", value: number) {
     setState((current) => ({
@@ -183,8 +177,8 @@ export default function DashboardPanel({ state: recordedState, setState }: Props
           <h2 className="mt-2 text-xl font-semibold tracking-tight">先守住风险预算，再寻找赔率</h2>
           <p className="mt-2 text-sm leading-6 text-slate-500">你的新增资金能力稳定，不需要用集中押注换取速度。优先完善观察池证据和退出条件。</p>
           <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">A股环境</p><p className={`mt-1 text-xl font-semibold ${market.tone}`}>{market.label}</p></div>
-            <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">权益仓位参考</p><p className="mt-1 text-xl font-semibold tabular-nums">{marketPosition}</p></div>
+            <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">回撤阶段</p><p className={`mt-1 text-xl font-semibold ${risk.stage.color}`}>{risk.stage.level}</p></div>
+            <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">计划权益比例 · 手工目标</p><p className="mt-1 text-xl font-semibold tabular-nums">{state.profile.allocations.index + state.profile.allocations.stocks}%</p></div>
             <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">最大单股建议</p><p className="mt-1 text-xl font-semibold tabular-nums">8%</p></div>
             <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">紧急备用金</p><p className="mt-1 text-xl font-semibold tabular-nums">3 个月</p></div>
           </div>

@@ -1,176 +1,51 @@
 "use client";
-
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
+import { marketApiUrl } from "@/lib/live-market";
+import { navigateInvestmentView } from "@/lib/invest-navigation";
+import { getRiskBudget, makeId, MarketTheme, PersonalInvestmentState, PolicyEvidence } from "@/lib/personal-investment";
+import { buttonClass, Card, Empty, Field, inputClass, money, secondaryButtonClass } from "./ui";
 
-import {
-  DEFAULT_STATE,
-  getDrawdownPct,
-  getMarketEnvironment,
-  getRiskAdjustedEquityCap,
-  getThemeScore,
-  makeId,
-  MarketEnvironment,
-  MarketTheme,
-  PersonalInvestmentState,
-} from "@/lib/personal-investment";
-import { buttonClass, Card, Empty, Field, inputClass, ProgressBar, secondaryButtonClass } from "./ui";
+type Props={state:PersonalInvestmentState;setState:Dispatch<SetStateAction<PersonalInvestmentState>>};
+type Sector={code:string;name:string;pct:number;rank:number;quote_time:string};
+type Radar={fetched_at:string;quote_time:string|null;data_date:string|null;refresh_seconds:number;session:string;stale:boolean;trend:{date:string;close:number;ma20:number;ma60:number|null;ma200:number|null;volume_ratio:number|null}|null;sectors:{rows:Sector[];data_date:string|null;covered:number;source_total:number;advancing:number;declining:number;flat:number}|null;sentiment:{date:string|null;limit_up:number|null;limit_down:number|null;break_rate:number|null};feeds:Record<string,{status:string}>};
+const emptyTheme:Omit<MarketTheme,"id">={name:"",thesis:"",risks:"",status:"待核实",sectorCode:"",evidence:"",invalidation:""};
+const emptyEvidence:Omit<PolicyEvidence,"id">={title:"",kind:"政策",publishedAt:"",sourceName:"",sourceUrl:"",facts:"",implication:"",status:"待核实"};
+const time=(v:string|null|undefined)=>v?new Date(v).toLocaleString("zh-CN"):"未知";
+const pct=(v:number|undefined|null)=>v==null?"未知":`${v>0?"+":""}${v.toFixed(2)}%`;
+function httpUrl(v:string){try{const u=new URL(v);return ["http:","https:"].includes(u.protocol)&&!u.username&&!u.password;}catch{return false;}}
 
-type Props = {
-  state: PersonalInvestmentState;
-  setState: Dispatch<SetStateAction<PersonalInvestmentState>>;
-};
-
-const LEVELS = ["很弱", "偏弱", "中性", "偏强", "很强"];
-const ENVIRONMENT_ITEMS: { key: keyof Pick<MarketEnvironment, "trend" | "policy" | "liquidity" | "sentiment">; label: string; description: string }[] = [
-  { key: "trend", label: "大盘趋势", description: "指数趋势、市场宽度与关键位置" },
-  { key: "policy", label: "政策方向", description: "增量政策、产业支持与落地强度" },
-  { key: "liquidity", label: "资金与成交", description: "成交额、增量资金与风险偏好" },
-  { key: "sentiment", label: "市场情绪", description: "赚钱效应、涨跌停与高位反馈" },
-];
-
-const THEME_ITEMS: { key: keyof Pick<MarketTheme, "policy" | "prosperity" | "capital" | "leadership" | "catalyst">; label: string }[] = [
-  { key: "policy", label: "产业政策" },
-  { key: "prosperity", label: "行业景气" },
-  { key: "capital", label: "资金流向" },
-  { key: "leadership", label: "龙头效应" },
-  { key: "catalyst", label: "催化事件" },
-];
-
-const EMPTY_THEME: Omit<MarketTheme, "id"> = {
-  name: "",
-  policy: 3,
-  prosperity: 3,
-  capital: 3,
-  leadership: 3,
-  catalyst: 3,
-  thesis: "",
-  risks: "",
-};
-
-export default function MarketRadarPanel({ state, setState }: Props) {
-  const [showThemeForm, setShowThemeForm] = useState(false);
-  const [draft, setDraft] = useState(EMPTY_THEME);
-  const marketEnvironment = state.marketEnvironment ?? DEFAULT_STATE.marketEnvironment;
-  const marketThemes = state.marketThemes ?? [];
-  const environment = useMemo(() => getMarketEnvironment(marketEnvironment), [marketEnvironment]);
-  const updatedLabel = marketEnvironment.updatedAt
-    ? new Date(marketEnvironment.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
-    : "尚未更新";
-  const drawdown = getDrawdownPct(state.profile.peakAssets, state.profile.currentAssets);
-  const riskCap = getRiskAdjustedEquityCap(drawdown);
-  const isCapped = riskCap < environment.range[1];
-  const rankedThemes = useMemo(
-    () => [...marketThemes].sort((a, b) => getThemeScore(b) - getThemeScore(a)),
-    [marketThemes],
-  );
-
-  function updateEnvironment(key: keyof MarketEnvironment, value: string | number) {
-    setState((current) => ({
-      ...current,
-      marketEnvironment: {
-        ...(current.marketEnvironment ?? DEFAULT_STATE.marketEnvironment),
-        [key]: value,
-        updatedAt: new Date().toISOString(),
-      },
-    }));
-  }
-
-  function addTheme() {
-    if (!draft.name.trim()) return;
-    setState((current) => ({
-      ...current,
-      marketThemes: [...(current.marketThemes ?? []), { ...draft, id: makeId("theme"), name: draft.name.trim() }],
-    }));
-    setDraft(EMPTY_THEME);
-    setShowThemeForm(false);
-  }
-
-  return (
-    <div className="space-y-5">
-      <div className="grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
-        <Card className="overflow-hidden !bg-[#10281d] text-white">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-emerald-300">人工环境判断</p>
-              <h2 className="mt-2 text-2xl font-semibold">市场状态 · {environment.label}</h2>
-            </div>
-            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-[7px] border-emerald-400/25 bg-white/5">
-              <span className="text-2xl font-semibold tabular-nums">{environment.score}</span>
-            </div>
-          </div>
-          <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.06] p-5">
-            <p className="text-xs text-emerald-100/60">建议权益仓位</p>
-            <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">
-              {isCapped ? `不高于 ${riskCap}%` : `${environment.range[0]}%–${environment.range[1]}%`}
-            </p>
-            <p className="mt-3 text-sm leading-6 text-emerald-50/75">{environment.action}</p>
-          </div>
-          {isCapped && <p className="mt-4 rounded-xl bg-amber-300/10 px-3 py-2 text-xs leading-5 text-amber-100">当前回撤 {drawdown.toFixed(1)}%，风险防线优先于市场强弱，已压低仓位上限。</p>}
-          <p className="mt-4 text-xs leading-5 text-emerald-100/50">仓位区间是决策约束，不是收益预测；还需结合持仓相关性和单股风险。</p>
-        </Card>
-
-        <Card>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div><h2 className="text-lg font-semibold">市场环境四维检查</h2><p className="mt-1 text-sm text-slate-500">每周或市场结构显著变化时更新，不因单日涨跌频繁调整。</p></div>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">手工录入 · {updatedLabel}</span>
-          </div>
-          <div className="mt-5 space-y-4">
-            {ENVIRONMENT_ITEMS.map((item) => (
-              <div key={item.key} className="grid gap-3 rounded-2xl border border-slate-200/80 p-4 lg:grid-cols-[150px_1fr] lg:items-center">
-                <div><p className="text-sm font-semibold text-slate-800">{item.label}</p><p className="mt-0.5 text-xs text-slate-400">{item.description}</p></div>
-                <LevelPicker value={marketEnvironment[item.key]} onChange={(value) => updateEnvironment(item.key, value)} />
-              </div>
-            ))}
-          </div>
-          <Field label="本周判断依据" hint="记录政策、量能或情绪变化，避免只留下一个分数。">
-            <textarea className={`${inputClass} mt-4 min-h-20 resize-y`} value={marketEnvironment.notes} onChange={(event) => updateEnvironment("notes", event.target.value)} placeholder="例：成交额连续三日回升，但高位股亏钱效应仍明显……" />
-          </Field>
-        </Card>
-      </div>
-
-      {showThemeForm && <Card>
-        <div><h2 className="text-lg font-semibold">添加候选主线</h2><p className="mt-1 text-sm text-slate-500">方向评分用于比较研究优先级，不替代个股财务质量与估值。</p></div>
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          <Field label="板块 / 主题名称"><input className={inputClass} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="如：高股息央企、半导体设备" /></Field>
-          <Field label="核心逻辑"><input className={inputClass} value={draft.thesis} onChange={(event) => setDraft({ ...draft, thesis: event.target.value })} placeholder="景气与资金为什么可能延续？" /></Field>
-        </div>
-        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          {THEME_ITEMS.map((item) => <div key={item.key}><p className="mb-2 text-xs font-medium text-slate-600">{item.label}</p><LevelPicker compact value={draft[item.key]} onChange={(value) => setDraft({ ...draft, [item.key]: value })} /></div>)}
-        </div>
-        <Field label="主要反向风险"><textarea className={`${inputClass} mt-4 min-h-20 resize-y`} value={draft.risks} onChange={(event) => setDraft({ ...draft, risks: event.target.value })} placeholder="政策不及预期、景气见顶、资金撤离、龙头破位……" /></Field>
-        <div className="mt-4 flex gap-2"><button className={buttonClass} onClick={addTheme}>保存主线</button><button className={secondaryButtonClass} onClick={() => setShowThemeForm(false)}>取消</button></div>
-      </Card>}
-
-      <Card>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="text-lg font-semibold">主线候选排序</h2><p className="mt-1 text-sm text-slate-500">看政策、景气、资金、龙头与催化是否形成共振。</p></div>
-          <button className={buttonClass} onClick={() => setShowThemeForm((show) => !show)}>{showThemeForm ? "收起录入" : "添加候选主线"}</button>
-        </div>
-        {rankedThemes.length === 0 ? <div className="mt-5"><Empty>尚未建立主线候选。先添加你准备持续跟踪的两个方向。</Empty></div> : <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          {rankedThemes.map((theme) => {
-            const score = getThemeScore(theme);
-            const label = score >= 70 ? "重点跟踪" : score >= 55 ? "继续观察" : "等待共振";
-            return <article key={theme.id} className="rounded-2xl border border-slate-200 p-5">
-              <div className="flex items-start justify-between gap-4"><div><h3 className="font-semibold text-slate-900">{theme.name}</h3><p className="mt-1 text-xs text-slate-500">{label}</p></div><span className="text-2xl font-semibold text-[#173f2c] tabular-nums">{score}</span></div>
-              <div className="mt-4"><ProgressBar value={score} /></div>
-              <div className="mt-4 grid grid-cols-5 gap-2">{THEME_ITEMS.map((item) => <div key={item.key} className="text-center"><p className="text-[11px] text-slate-400">{item.label}</p><p className="mt-1 text-sm font-semibold">{theme[item.key]}/5</p></div>)}</div>
-              {theme.thesis && <p className="mt-4 text-sm leading-6 text-slate-600">{theme.thesis}</p>}
-              {theme.risks && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">风险：{theme.risks}</p>}
-              <button className={`${secondaryButtonClass} mt-4 w-full`} onClick={() => setState((current) => ({ ...current, marketThemes: (current.marketThemes ?? []).filter((item) => item.id !== theme.id) }))}>移除</button>
-            </article>;
-          })}
-        </div>}
-      </Card>
-    </div>
-  );
-}
-
-function LevelPicker({ value, onChange, compact = false }: { value: number; onChange: (value: number) => void; compact?: boolean }) {
-  if (compact) {
-    return <select className={inputClass} value={value} onChange={(event) => onChange(Number(event.target.value))}>{LEVELS.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}</select>;
-  }
-  return <div className="grid grid-cols-5 gap-1.5">
-    {LEVELS.map((label, index) => <button key={label} type="button" onClick={() => onChange(index + 1)} className={`rounded-lg border px-2 py-2 text-xs font-medium transition ${value === index + 1 ? "border-emerald-700 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"}`}>{label}</button>)}
-  </div>;
+export default function MarketRadarPanel({state,setState}:Props){
+ const [data,setData]=useState<Radar|null>(null),[error,setError]=useState(""),[loading,setLoading]=useState(true),[reload,setReload]=useState(0);
+ const [theme,setTheme]=useState<Omit<MarketTheme,"id">>(emptyTheme),[themeId,setThemeId]=useState<string|null>(null),[showTheme,setShowTheme]=useState(false),[themeError,setThemeError]=useState(""),[filter,setFilter]=useState("全部");
+ const [evidence,setEvidence]=useState<Omit<PolicyEvidence,"id">>(emptyEvidence),[evidenceId,setEvidenceId]=useState<string|null>(null),[showEvidence,setShowEvidence]=useState(false),[evidenceError,setEvidenceError]=useState("");
+ const risk=getRiskBudget(state.profile),trend=data?.trend,breadth=data?.sectors,sentiment=data?.sentiment,policies=state.policyEvidence||[];
+ const priority={关注:0,待核实:1,排除:2};
+ const candidates=state.marketThemes.filter(t=>filter==="全部"||(t.status||"待核实")===filter).sort((a,b)=>priority[a.status||"待核实"]-priority[b.status||"待核实"]||(b.updatedAt||"").localeCompare(a.updatedAt||""));
+ useEffect(()=>{let active=true,timer:ReturnType<typeof setTimeout>;const controller=new AbortController();async function load(){setLoading(true);let delay=30;try{const r=await fetch(`${marketApiUrl()}/market/radar`,{signal:controller.signal,cache:"no-store"});const p=await r.json();if(!r.ok)throw new Error(p.detail||"市场数据不可用");if(active){setData(p);setError("");delay=p.refresh_seconds||30;}}catch(e){if(active&&!controller.signal.aborted){setData(null);setError(String(e));}}finally{if(active){setLoading(false);timer=setTimeout(load,delay*1000);}}}load();return()=>{active=false;controller.abort();clearTimeout(timer);};},[reload]);
+ function saveTheme(){if(!theme.name.trim()){setThemeError("请填写候选方向名称。");return;}const item={...theme,name:theme.name.trim(),id:themeId||makeId("theme"),updatedAt:new Date().toISOString()};setState(s=>({...s,marketThemes:themeId?s.marketThemes.map(t=>t.id===themeId?item:t):[...s.marketThemes,item]}));setShowTheme(false);setThemeId(null);setThemeError("");}
+ function saveEvidence(){if(!evidence.title.trim()||!evidence.publishedAt||!evidence.sourceName.trim()||!evidence.facts.trim()||!httpUrl(evidence.sourceUrl)){setEvidenceError("请填写标题、发布日期、来源、原文事实和有效HTTP(S)链接。");return;}const item={...evidence,id:evidenceId||makeId("evidence")};setState(s=>({...s,policyEvidence:evidenceId?(s.policyEvidence||[]).map(p=>p.id===evidenceId?item:p):[item,...(s.policyEvidence||[])]}));setShowEvidence(false);setEvidenceId(null);setEvidenceError("");}
+ return <div className="space-y-5">
+  <Card className="!bg-[#10281d] !text-white"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs tracking-widest text-emerald-200/80">MARKET RADAR · 市场与证据</p><h2 className="mt-2 text-2xl font-semibold">市场发生了什么，哪些证据还缺失？</h2><p className="mt-2 text-sm leading-6 text-white/65">先看数据与范围，再记录政策和产业证据；无需手工打分。</p></div><button disabled={loading} className="rounded-xl border border-white/25 px-4 py-2 text-sm disabled:opacity-50" onClick={()=>setReload(v=>v+1)}>{loading?"正在更新…":"刷新市场数据"}</button></div><p className="mt-5 text-xs text-emerald-100/70">{data?.session||"等待真实数据"} · 仓位约束统一来自驾驶舱</p></Card>
+  <Card className={risk.stage.background}><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs text-slate-500">驾驶舱风险约束 · 同一账户数据与规则</p><h3 className="mt-2 text-lg font-semibold">{risk.stage.level} · 当前回撤 {risk.drawdownPct.toFixed(1)}%</h3><p className="mt-2 text-sm leading-6">{risk.stage.instruction}</p><p className="mt-2 text-xs text-slate-500">剩余风险预算 {money(risk.remaining)} · 资产及峰值在驾驶舱维护，市场数据不改变风险约束。</p></div><button className={secondaryButtonClass} onClick={()=>navigateInvestmentView("dashboard")}>查看驾驶舱</button></div></Card>
+  {error&&<Card><p role="alert" className="text-sm text-red-700">市场数据读取失败：{error}</p><p className="mt-2 text-xs text-slate-500">数据保持未知，不生成分数或演示行情。你的证据和候选仍可编辑。</p><button className={`${secondaryButtonClass} mt-3`} onClick={()=>setReload(v=>v+1)}>重试市场数据</button></Card>}
+  {data&&<p className="text-xs leading-6 text-slate-400">上证参考报价时间 {time(data.quote_time)} · 本机获取 {time(data.fetched_at)} · {data.refresh_seconds}秒刷新{data.stale?" · 报价过期，请复核":""}</p>}
+  <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-4">
+   <Card><p className="text-xs font-semibold text-emerald-700">01 · 趋势事实</p><h3 className="mt-2 font-semibold">沪深300ETF（510300）</h3><p className="mt-4 text-3xl font-semibold">{trend?trend.close.toFixed(3):"未知"}</p><div className="mt-4 space-y-2 text-xs text-slate-500">{([20,60,200] as const).map(n=>{const ma=trend?.[`ma${n}`];return <p key={n} className="flex justify-between gap-2"><span>{n}日均线</span><span>{ma!=null&&trend?`${ma.toFixed(3)} · 价格${trend.close>=ma?"在上方":"在下方"}`:"历史不足 / 未知"}</span></p>;})}</div><p className="mt-4 text-[11px] leading-5 text-slate-400">腾讯前复权完整日线 · 截至 {trend?.date||"未知"}。宽基ETF样本不作牛熊判断。</p></Card>
+   <Card><p className="text-xs font-semibold text-emerald-700">02 · 成交活跃度</p><h3 className="mt-2 font-semibold">宽基ETF样本成交量</h3><p className="mt-4 text-3xl font-semibold">{trend?.volume_ratio!=null?`${trend.volume_ratio.toFixed(2)}×`:"未知"}</p><p className="mt-3 text-sm text-slate-500">最近完整交易日 / 此前20日均量</p><p className="mt-4 text-[11px] leading-5 text-slate-400">510300 · 截至 {trend?.date||"未知"}。不等同全市场资金净流入或全市场成交额。</p></Card>
+   <Card><p className="text-xs font-semibold text-emerald-700">03 · 行业宽度</p><h3 className="mt-2 font-semibold">上涨 / 下跌行业</h3><p className="mt-4 text-3xl font-semibold">{breadth?.covered?`${breadth.advancing} / ${breadth.declining}`:"未知"}</p><p className="mt-3 text-sm text-slate-500">{breadth?.covered?`平盘 ${breadth.flat} · 有效 ${breadth.covered}/${breadth.source_total}`:"等待行业数据"}</p><p className="mt-4 text-[11px] leading-5 text-slate-400">东方财富行业板块 · {breadth?.data_date||"见各板块时间"}。行业数量不是股票涨跌家数。</p></Card>
+   <Card><p className="text-xs font-semibold text-emerald-700">04 · 情绪事实</p><h3 className="mt-2 font-semibold">涨停 / 跌停</h3><p className="mt-4 text-3xl font-semibold">{sentiment?.limit_up??"未知"} / {sentiment?.limit_down??"未知"}</p><p className="mt-3 text-sm text-slate-500">炸板率 {sentiment?.break_rate!=null?`${sentiment.break_rate.toFixed(2)}%`:"未知"}</p><p className="mt-4 text-[11px] leading-5 text-slate-400">东方财富股票池 · {sentiment?.date||"日期未知"} · 秒级延迟未知。</p><button className="mt-3 text-xs text-emerald-700 underline" onClick={()=>navigateInvestmentView("cycle")}>查看情绪周期与龙头</button></Card>
+  </div>
+  {data&&Object.values(data.feeds).some(f=>f.status!=="正常")&&<p className="text-xs text-amber-800">部分来源不可用，相关字段显示未知；缺失值不补零。</p>}
+  <Card><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-semibold">政策与产业证据</h3><p className="mt-1 text-sm text-slate-500">保存原文、日期和影响假设。人工核对不代表系统自动验证。</p></div><button className={buttonClass} onClick={()=>{setEvidence(emptyEvidence);setEvidenceId(null);setEvidenceError("");setShowEvidence(true);}}>添加证据</button></div>
+   {showEvidence&&<div className="mt-5 rounded-2xl border bg-slate-50 p-4"><h4 className="font-semibold">{evidenceId?"编辑证据":"新增证据"}</h4><div className="mt-4 grid gap-3 sm:grid-cols-2"><Field label="证据标题"><input className={inputClass} value={evidence.title} onChange={e=>setEvidence({...evidence,title:e.target.value})}/></Field><Field label="证据类型"><select className={inputClass} value={evidence.kind} onChange={e=>setEvidence({...evidence,kind:e.target.value as PolicyEvidence["kind"]})}><option>政策</option><option>产业</option></select></Field><Field label="发布日期"><input className={inputClass} type="date" value={evidence.publishedAt} onChange={e=>setEvidence({...evidence,publishedAt:e.target.value})}/></Field><Field label="发布机构 / 数据来源"><input className={inputClass} value={evidence.sourceName} onChange={e=>setEvidence({...evidence,sourceName:e.target.value})}/></Field><Field label="原文链接"><input className={inputClass} type="url" placeholder="https://" value={evidence.sourceUrl} onChange={e=>setEvidence({...evidence,sourceUrl:e.target.value})}/></Field><Field label="核对状态"><select className={inputClass} value={evidence.status} onChange={e=>setEvidence({...evidence,status:e.target.value as PolicyEvidence["status"]})}><option>待核实</option><option>已人工核对</option><option>不再适用</option></select></Field><Field label="原文事实"><textarea className={`${inputClass} min-h-24`} value={evidence.facts} onChange={e=>setEvidence({...evidence,facts:e.target.value})}/></Field><Field label="影响假设与待核实项"><textarea className={`${inputClass} min-h-24`} value={evidence.implication} onChange={e=>setEvidence({...evidence,implication:e.target.value})}/></Field></div>{evidenceError&&<p role="alert" className="mt-3 text-sm text-red-700">{evidenceError}</p>}<div className="mt-4 flex gap-2"><button className={buttonClass} onClick={saveEvidence}>保存证据</button><button className={secondaryButtonClass} onClick={()=>setShowEvidence(false)}>取消证据编辑</button></div></div>}
+   {!policies.length&&!showEvidence&&<div className="mt-5"><Empty>添加你看到的政策原文或产业数据，先标为“待核实”即可。</Empty></div>}
+   <div className="mt-5 grid gap-4 lg:grid-cols-2">{policies.map(p=><article key={p.id} className="min-w-0 rounded-2xl border p-4"><div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500"><span>{p.kind} · {p.publishedAt}</span><span>{p.status}</span></div><h4 className="mt-2 font-semibold">{p.title}</h4><p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6">{p.facts}</p>{p.implication&&<p className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-amber-50 p-3 text-xs leading-6 text-amber-800">影响假设：{p.implication}</p>}{httpUrl(p.sourceUrl)&&<a className="mt-3 block text-xs text-emerald-700 underline" href={p.sourceUrl} target="_blank" rel="noreferrer">查看原文 · {p.sourceName}</a>}<div className="mt-4 flex flex-wrap gap-2"><button className={secondaryButtonClass} onClick={()=>{setEvidence({...p});setEvidenceId(p.id);setEvidenceError("");setShowEvidence(true);}}>编辑证据</button><button className={secondaryButtonClass} onClick={()=>{if(confirm("删除这条证据记录？"))setState(s=>({...s,policyEvidence:(s.policyEvidence||[]).filter(x=>x.id!==p.id)}));}}>删除证据</button></div></article>)}</div>
+  </Card>
+  <Card><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-semibold">候选方向 · 盘面与产业分开看</h3><p className="mt-1 text-sm text-slate-500">按跟踪状态和更新时间排列，不做综合强弱打分。</p></div><div className="flex flex-wrap gap-2"><Field label="候选状态筛选"><select className={inputClass} value={filter} onChange={e=>setFilter(e.target.value)}>{["全部","关注","待核实","排除"].map(s=><option key={s}>{s}</option>)}</select></Field><button className={buttonClass} onClick={()=>{setTheme(emptyTheme);setThemeId(null);setThemeError("");setShowTheme(true);}}>添加候选方向</button></div></div>
+   {showTheme&&<div className="mt-5 rounded-2xl border bg-slate-50 p-4"><h4 className="font-semibold">{themeId?"编辑候选方向":"新增候选方向"}</h4><div className="mt-4 grid gap-3 sm:grid-cols-2"><Field label="候选方向名称"><input className={inputClass} value={theme.name} onChange={e=>setTheme({...theme,name:e.target.value})}/></Field><Field label="跟踪状态"><select className={inputClass} value={theme.status||"待核实"} onChange={e=>setTheme({...theme,status:e.target.value as MarketTheme["status"]})}>{["关注","待核实","排除"].map(s=><option key={s}>{s}</option>)}</select></Field><Field label="关联行业（用于读取盘面）"><select className={inputClass} value={theme.sectorCode||""} onChange={e=>setTheme({...theme,sectorCode:e.target.value})}><option value="">暂不关联 · 盘面未知</option>{theme.sectorCode&&!breadth?.rows.some(s=>s.code===theme.sectorCode)&&<option value={theme.sectorCode}>已保存关联 · {theme.sectorCode}</option>}{breadth?.rows.map(s=><option key={s.code} value={s.code}>{s.name}</option>)}</select></Field><Field label="核心逻辑（研究假设）"><input className={inputClass} value={theme.thesis} onChange={e=>setTheme({...theme,thesis:e.target.value})}/></Field><Field label="产业证据与来源日期"><textarea className={`${inputClass} min-h-24`} value={theme.evidence||""} onChange={e=>setTheme({...theme,evidence:e.target.value})} placeholder="可引用上方证据；没有证据时写待核实。"/></Field><Field label="主要反向风险"><textarea className={`${inputClass} min-h-24`} value={theme.risks} onChange={e=>setTheme({...theme,risks:e.target.value})}/></Field><Field label="失效 / 排除条件"><textarea className={`${inputClass} min-h-20`} value={theme.invalidation||""} onChange={e=>setTheme({...theme,invalidation:e.target.value})}/></Field></div>{themeError&&<p role="alert" className="mt-3 text-sm text-red-700">{themeError}</p>}<div className="mt-4 flex gap-2"><button className={buttonClass} onClick={saveTheme}>保存候选方向</button><button className={secondaryButtonClass} onClick={()=>setShowTheme(false)}>取消候选编辑</button></div></div>}
+   <div className="mt-5 grid gap-4 lg:grid-cols-2">{candidates.map(t=>{const sector=breadth?.rows.find(s=>s.code===t.sectorCode);return <article key={t.id} className="min-w-0 rounded-2xl border p-5"><div className="flex flex-wrap justify-between gap-2"><h4 className="font-semibold">{t.name}</h4><span className="rounded-lg bg-slate-100 px-2 py-1 text-xs">{t.status||"待核实"}</span></div>{!t.status&&<p className="mt-2 text-xs text-slate-400">原候选已保留，旧评分不再参与判断。</p>}<div className="mt-4 grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-[#f4f7f3] p-3"><p className="text-xs text-slate-500">盘面事实</p><p className="mt-2 text-xl font-semibold">{pct(sector?.pct)}</p><p className="mt-1 text-xs leading-5 text-slate-500">{sector?`${sector.name} · 当日行业第${sector.rank}/${breadth?.covered}位`:t.sectorCode?"关联行情暂不可用":"尚未关联行业"}</p><p className="mt-2 text-[10px] text-slate-400">{sector?time(sector.quote_time):"不以默认分数代替行情"}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">产业证据</p><p className="mt-2 whitespace-pre-wrap break-words text-xs leading-6">{t.evidence||"待补充来源、日期与经营数据；尚未确认产业景气。"}</p></div></div>{t.thesis&&<p className="mt-4 whitespace-pre-wrap break-words text-sm leading-6">研究假设：{t.thesis}</p>}{t.risks&&<p className="mt-3 whitespace-pre-wrap break-words text-xs leading-6 text-amber-800">反向风险：{t.risks}</p>}<p className="mt-3 whitespace-pre-wrap break-words text-xs leading-6 text-slate-500">失效条件：{t.invalidation||"待补充"}</p><div className="mt-4 flex flex-wrap gap-2"><button className={secondaryButtonClass} onClick={()=>{setTheme({...t,status:t.status||"待核实"});setThemeId(t.id);setShowTheme(true);setThemeError("");}}>编辑候选</button><button className={secondaryButtonClass} onClick={()=>{if(confirm("移除这条候选方向？"))setState(s=>({...s,marketThemes:s.marketThemes.filter(x=>x.id!==t.id)}));}}>移除候选</button><button className="text-xs text-emerald-700 underline" onClick={()=>navigateInvestmentView("research")}>进入个股研究</button></div></article>;})}</div>{!candidates.length&&!showTheme&&<div className="mt-5"><Empty>暂无符合条件的候选。添加想研究的方向，状态可保持“待核实”。</Empty></div>}
+  </Card>
+  <Card><h3 className="font-semibold">观察笔记</h3><p className="mt-1 text-xs text-slate-400">保留原“本周判断依据”，自动保存。写事实、疑问和下次复核条件即可。</p><Field label="市场观察笔记"><textarea className={`${inputClass} mt-3 min-h-28`} value={state.marketEnvironment.notes} onChange={e=>setState(s=>({...s,marketEnvironment:{...s.marketEnvironment,notes:e.target.value,updatedAt:new Date().toISOString()}}))}/></Field></Card>
+ </div>;
 }
