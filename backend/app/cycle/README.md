@@ -57,7 +57,7 @@ npm run dev
 
 分类、行业、低位筛选、股票详情、研究卡片及PNG导出均在网页完成。前90只候选另做30秒报价刷新，其余保留扫描时点；评分仍对应上次完整扫描。PNG导出当前筛选结果的前8条。真实源失败显示错误及旧缓存状态，不回退虚构候选。
 
-另一目录`/Users/douyunhao/Code/quant-copilot`保留Streamlit入口，运行`./.venv/bin/streamlit run app.py --server.port 8501`。其中红利页嵌入主项目真实看板，需要3000前端与8000后端同时运行。原终端分析仍使用Yahoo Finance，不应与A股主系统的腾讯/东方财富来源混同；规则回退及模型观点不属于真实行情事实。
+旧Streamlit终端已迁入主项目“功能中心 → 综合研究”，不再依赖8501或旧源码目录。股票诊断默认A股，显式输入境外代码时使用Yahoo Finance并单独标注美元和历史日期。迁移范围与验证见`docs/2026-11-06-terminal-migration.md`。原终端标签页小图标原样保存在前端`app/icon.png`。
 
 ## 真实历史回放
 

@@ -17,10 +17,12 @@ const SimulationModule = dynamic(() => import("./modules/live-strategy-lab"), { 
 const AllocationModule = dynamic(() => import("./modules/live-allocation"), { loading });
 const ComplianceModule = dynamic(() => import("./modules/ComplianceModule"), { loading });
 const SettingsModule = dynamic(() => import("./modules/SettingsModule"), { loading });
+const ResearchLabModule = dynamic(() => import("./modules/ResearchLabModule"), { loading });
 
-type ToolId = "ticker" | "screening" | "fund" | "backtest" | "research" | "paper" | "sim" | "allocation" | "compliance" | "settings";
+type ToolId = "ticker" | "screening" | "fund" | "backtest" | "research" | "paper" | "sim" | "allocation" | "compliance" | "settings" | "lab";
 
 const TOOLS: { id: ToolId; label: string; description: string; group: string; legacy?: boolean }[] = [
+  { id: "lab", label: "综合研究", description: "技术风险、基金深研、推演与档案", group: "研究" },
   { id: "ticker", label: "A股行情", description: "K线、成交量、资金流与新闻", group: "数据" },
   { id: "screening", label: "多因子选股", description: "动量、趋势、回撤与资金评分", group: "数据" },
   { id: "fund", label: "基金与ETF", description: "净值、折溢价、收益和风险", group: "数据" },
@@ -34,6 +36,7 @@ const TOOLS: { id: ToolId; label: string; description: string; group: string; le
 ];
 
 const MODULES: Record<ToolId, React.ComponentType> = {
+  lab: ResearchLabModule,
   ticker: TickerModule,
   screening: ScreeningModule,
   fund: FundModule,
