@@ -50,7 +50,17 @@ function QualityDetails({ quality }: { quality?: DividendQuality }) {
 
 type BondBenchmark = { date: string; yieldPct: number; previousDate: string | null; changeBp: number | null };
 
-type Stock = {pe?:number|null;pb?:number|null;annualCashPerShare?:{year:number;cash:number}[];code:string;name:string;sector:string;category:string;price:number;dividendYield:number;cashPerShare:number;consecutiveYears:number;lowPosition:number;quality?:DividendQuality;signal:string;quoteTime:string;history:number[];historyDates:string[];historyThrough:string;drawdown:number;dividendRecords:{exDate:string;cashPerShare:number;reportDate:string}[]};
+type ScreeningStatus = "pass" | "fail" | "unknown" | "manual";
+type ScreeningFilter = ScreeningStatus | "all" | "supported";
+type Screening = {
+  status: ScreeningStatus;
+  checks: { label: string; value: number | null; unit: string; minimum: number; maximum: number | null; passed: boolean | null }[];
+};
+const screeningLabels: Record<ScreeningStatus, string> = {
+  pass: "量化通过", fail: "未达标", unknown: "数据不足", manual: "需人工复核",
+};
+
+type Stock = {screening?:Screening;pe?:number|null;pb?:number|null;annualCashPerShare?:{year:number;cash:number}[];code:string;name:string;sector:string;category:string;price:number;dividendYield:number;cashPerShare:number;consecutiveYears:number;lowPosition:number;quality?:DividendQuality;signal:string;quoteTime:string;history:number[];historyDates:string[];historyThrough:string;drawdown:number;dividendRecords:{exDate:string;cashPerShare:number;reportDate:string}[]};
 type Board = {benchmark?:BondBenchmark|null;strategyVersion?:number;status:string;progress:string;tradeDate?:string;updatedAt?:string;stocks:Stock[];scanned:number;preselected:number;checked:number;failures:string[];notes?:string[];source?:string;config?:Record<string,number>};
 function FrameworkDetails({ stock, benchmark }: { stock: Stock; benchmark?: BondBenchmark | null }) {
   const quality = stock.quality;
@@ -77,12 +87,29 @@ function FrameworkDetails({ stock, benchmark }: { stock: Stock; benchmark?: Bond
     )}</dl>
   </details>;
 }
+function ScreeningDetails({ screening }: { screening?: Screening }) {
+  if (!screening) return null;
+  return <details className="mt-3 border-t border-slate-100 pt-3 text-xs leading-6 text-slate-700">
+    <summary className="cursor-pointer font-semibold text-slate-900">自动筛选 · {screeningLabels[screening.status]}</summary>
+    <ul className="mt-2 divide-y divide-slate-100">
+      {screening.checks.map(({ label, value, unit, minimum, maximum, passed }) => (
+        <li className="flex flex-wrap justify-between gap-x-3 py-1" key={label}>
+          <span>{label} <span className="text-slate-500">（{maximum === null ? `≥${minimum}` : `${minimum}–${maximum}`}{unit}）</span></span>
+          <span className={passed === true ? "text-emerald-700" : passed === false ? "text-amber-800" : "text-slate-500"}>
+            {value === null ? "未知" : `${Number(value.toFixed(2))}${unit} · ${passed ? "通过" : "未通过"}`}
+          </span>
+        </li>
+      ))}
+    </ul>
+    <p className="mt-2 text-slate-500">按扫描快照判定，另需核对历史估值、行业基本面和治理。分红风险或其他财务复核项见上方财务分层。</p>
+  </details>;
+}
 const signalName = (s:string) => s === "stage" ? "低位观察" : s === "wait" ? "位置偏高" : "持续观察";
 
 export default function DividendPanel({state,setState}:{state:PersonalInvestmentState;setState:Dispatch<SetStateAction<PersonalInvestmentState>>}) {
   const [actionError,setActionError]=useState(""),[joining,setJoining]=useState(false);
   async function join(code:string,research=false){setJoining(true);setActionError("");try{const info=await fetchCompanyInfo(code);setState(s=>research?upsertCompany(upsertCompany(s,info,"watch","红利看板"),info,"research"):upsertCompany(s,info,"watch","红利看板"));if(research)navigateInvestmentView("research",code);}catch(e){setActionError(String(e));}finally{setJoining(false);}}
-  const [data,setData]=useState<Board|null>(null),[error,setError]=useState(""),[category,setCategory]=useState("全部"),[sector,setSector]=useState("全部"),[onlyLow,setOnlyLow]=useState(false),[onlySupported,setOnlySupported]=useState(false),[selected,setSelected]=useState(""),[view,setView]=useState("分类看板");
+  const [data,setData]=useState<Board|null>(null),[error,setError]=useState(""),[category,setCategory]=useState("全部"),[sector,setSector]=useState("全部"),[onlyLow,setOnlyLow]=useState(false),[screenFilter,setScreenFilter]=useState<ScreeningFilter>("pass"),[selected,setSelected]=useState(""),[view,setView]=useState("分类看板");
   useEffect(()=>{ if(new URLSearchParams(window.location.search).get("cards")==="1")setView("红利筛选摘要"); },[]);
   useEffect(()=>{
     let active=true;let timer:ReturnType<typeof setTimeout>;const controller=new AbortController();
@@ -101,8 +128,15 @@ export default function DividendPanel({state,setState}:{state:PersonalInvestment
   }),[data,quotes.data,state.companies]);
   const categories=Array.from(new Set(liveStocks.map(s=>s.category))).sort();
   const industries=Array.from(new Set(liveStocks.filter(s=>category==="全部"||s.category===category).map(s=>s.sector))).sort();
-  const filtered=liveStocks.filter(s=>(category==="全部"||s.category===category)&&(sector==="全部"||s.sector===sector)&&(!onlyLow||s.signal==="stage")&&(!onlySupported||s.quality?.status==="supported"));
-  const ranked=categories.flatMap(c=>filtered.filter(s=>s.category===c).slice(0,data?.config?.dividend_per_category||8));
+  const hasScreening = (data?.strategyVersion ?? 0) >= 3 && liveStocks.some(s => s.screening);
+  const passingCount = liveStocks.filter(s => s.screening?.status === "pass").length;
+  const filtered=liveStocks.filter(s=>{
+    const matchesScreen = screenFilter === "supported" ? s.quality?.status === "supported" : s.screening?.status === screenFilter;
+    return (category==="全部"||s.category===category)&&(sector==="全部"||s.sector===sector)&&(!onlyLow||s.signal==="stage")
+      && (!hasScreening || screenFilter==="all" || matchesScreen);
+  });
+  const showAllMatches = hasScreening && screenFilter === "pass";
+  const ranked=showAllMatches ? filtered : categories.flatMap(c=>filtered.filter(s=>s.category===c).slice(0,data?.config?.dividend_per_category||8));
   const chosen=ranked.find(s=>s.code===selected)||ranked[0];
   const chosenCompany=chosen?state.companies?.[chosen.code]:undefined;
   useCompanyProfiles(chosenCompany?[chosenCompany.code]:[],setState);
@@ -120,15 +154,24 @@ export default function DividendPanel({state,setState}:{state:PersonalInvestment
     <Card><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">{data?.progress||"正在连接扫描服务…"}</h3><p className="mt-1 text-xs text-slate-400">{data?.updatedAt?`上次完整扫描：${new Date(data.updatedAt).toLocaleString("zh-CN")} · 行情日 ${data.tradeDate}`:"首次请启动全市场扫描，扫描期间可查看进度。"}</p></div><button className={buttonClass} disabled={data?.status==="running"} onClick={scan}>{data?.status==="running"?"正在扫描…":"扫描 / 更新真实数据"}</button></div>{error&&<p className="mt-3 text-sm text-red-700">{error}</p>}{data?.status==="error"&&<p className="mt-3 text-sm text-red-700">本次扫描失败。下方若有数据，仍是上次成功扫描，不能视作已更新。</p>}<div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4"><Metric label="全A股覆盖" value={String(data?.scanned||0)}/><Metric label="红利初筛" value={String(data?.preselected||0)}/><Metric label="日线核验" value={String(data?.checked||0)}/><Metric label="当前分类入选 / 平均息率" value={`${ranked.length} / ${avg.toFixed(2)}%`}/></div></Card>
     <Card><div className="grid gap-3 sm:grid-cols-4"><Field label="行业大类"><select className={inputClass} value={category} onChange={e=>{setCategory(e.target.value);setSector("全部");}}><option>全部</option>{categories.map(c=><option key={c}>{c}</option>)}</select></Field><Field label="细分行业"><select className={inputClass} value={sector} onChange={e=>setSector(e.target.value)}><option>全部</option>{industries.map(s=><option key={s}>{s}</option>)}</select></Field><Field label="展示方式"><select className={inputClass} value={view} onChange={e=>setView(e.target.value)}><option>分类看板</option><option>红利筛选摘要</option></select></Field><div className="flex items-end gap-3"><label className="text-sm"><input type="checkbox" checked={onlyLow} onChange={e=>setOnlyLow(e.target.checked)}/> 仅低位观察</label><button className={secondaryButtonClass} disabled={!ranked.length} onClick={exportPNG}>导出PNG</button></div></div><p className="mt-3 text-xs text-slate-400">列表为标注日期的扫描筛选快照，点击公司后查看统一实时资料与K线。分类排名基于上次完整扫描评分。最高评分的前90只候选另做30秒报价刷新；其他标的显示各自扫描时间，不混称全部实时。</p>{quotes.error&&<p className="mt-2 text-xs text-amber-700">报价刷新失败：{quotes.error}，保留已标注时间的扫描快照。</p>}</Card>
     {data?.stocks.length && !data.strategyVersion ? <Card>当前展示的是旧策略快照。重新扫描后，分类列表会按新版财务证据排序。</Card> : null}
-    {(data?.strategyVersion ?? 0) >= 2 && <Card><label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={onlySupported} onChange={e=>setOnlySupported(e.target.checked)} />只看财务证据支持</label><p className="mt-2 text-xs leading-6 text-slate-500">保留未知与风险候选供复核。价格位置只作辅助观察。</p></Card>}
+    {hasScreening && <Card>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div><h3 className="font-semibold">六维框架 · 自动筛选</h3><p className="mt-1 text-sm text-slate-600">量化通过 {passingCount} / {liveStocks.length} 只 · 以扫描日数据判定</p></div>
+        <Field label="筛选结果"><select className={inputClass} value={screenFilter} onChange={event=>setScreenFilter(event.target.value as ScreeningFilter)}>
+          <option value="pass">仅显示量化通过</option><option value="all">全部已核验候选</option><option value="supported">仅看财务证据支持</option>
+          <option value="fail">未达标</option><option value="unknown">数据不足</option><option value="manual">需人工复核</option>
+        </select></Field>
+      </div>
+      <p className="mt-2 text-xs leading-6 text-slate-500">仅显示量化通过时，不限制每类展示数量。历史估值、行业与治理仍需核对。</p>
+    </Card>}
     <Card><details className="text-sm leading-7 text-slate-700">
       <summary className="cursor-pointer font-semibold text-slate-950">六维框架与参考区间</summary>
       <p className="mt-2">参考《衡量红利股投资价值的评估框架》。先看盈利、派息与现金覆盖，再看估值、行业与利率。原框架所用的股息率约3%–6%、连续派息至少5年、支付率约30%–70%、经营现金流覆盖约1.5倍、经营现金流与净利约0.8倍，均为研究参考。支付率和现金流口径需按行业及资本需求调整。</p>
-      <p>查看个股的「展开六维评估」。现金覆盖不足或同财年派息超过利润仍按既有风险分层处理。估值分位及行业基本面需有独立证据。六维资料用于候选复核。</p>
+      <p>查看个股的「展开六维评估」。自动筛选采用框架中的4%–6%区间和至少2个百分点的股债差，并检查自由现金流覆盖及既有财务风险分层。逐项门槛可展开查看。</p>
     </details></Card>
-    {!ranked.length&&<Card>尚无符合条件的已核验标的。请先扫描真实数据；数据不足时不生成研究结论。</Card>}
-    {ranked.length>0&&view==="分类看板"&&<div className="grid items-start gap-5 xl:grid-cols-[1.6fr_1fr]"><Card><h3 className="text-lg font-semibold">分类优选 · 每类最多8只</h3><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b text-xs text-slate-400"><tr>{["公司","分类/行业","财务核验","连续派息","近12月息率","现价","价格位置","状态"].map(v=><th className="py-3" key={v}>{v}</th>)}</tr></thead><tbody>{ranked.map(s=><tr key={s.code} onClick={()=>setSelected(s.code)} className="cursor-pointer border-b border-slate-100 hover:bg-rose-50"><td className="py-3"><button className="text-left" onClick={()=>setSelected(s.code)}><strong>{s.name}</strong><small className="block text-slate-400">{s.code}</small></button></td><td className="text-xs">{s.category}<br/>{s.sector}</td><td className="text-xs">{s.quality ? qualityLabels[s.quality.status] : "旧策略"}</td><td>{s.consecutiveYears}年</td><td className="font-semibold text-[#913045]">{s.dividendYield.toFixed(2)}%</td><td>{s.price.toFixed(2)}</td><td>{s.lowPosition.toFixed(0)}%</td><td className="text-xs">{signalName(s.signal)}</td></tr>)}</tbody></table></div></Card>{chosen&&<Card><h3 className="text-xl font-semibold">{chosen.name} <span className="text-sm font-normal text-slate-400">{chosen.code}</span></h3><p className="mt-2 text-xs text-slate-400">报价时间 {new Date(chosen.quoteTime).toLocaleString("zh-CN")}</p><div className="mt-4 flex flex-wrap gap-2"><button disabled={joining} className={buttonClass} onClick={()=>state.companies?.[chosen.code]?.inWatchlist?navigateInvestmentView("watchlist",chosen.code):join(chosen.code)}>{state.companies?.[chosen.code]?.inWatchlist?"查看观察池":"加入观察池"}</button><button disabled={joining} className={secondaryButtonClass} onClick={()=>join(chosen.code,true)}>{state.companies?.[chosen.code]?.inWatchlist?"打开研究":"加入并研究"}</button></div><QualityDetails quality={chosen.quality}/><FrameworkDetails stock={chosen} benchmark={data?.benchmark}/>{chosenCompany&&<div className="mt-4"><CompanyFacts company={chosenCompany}/></div>}<div className="mt-5"><CompanyKline code={chosen.code}/></div><p className="mt-3 text-xs text-slate-400">下面为扫描时保存的分红记录；当前公司资料、研究区间及失效条件使用统一公司档案。</p><h4 className="mt-5 font-medium">已实施分红记录</h4>{chosen.dividendRecords.slice(0,6).map((r,i)=><div key={i} className="flex justify-between border-b py-2 text-xs"><span>{r.exDate}</span><span>每股 ¥{r.cashPerShare.toFixed(3)}</span></div>)}</Card>}</div>}
-    {view==="红利筛选摘要"&&ranked.length>0&&<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{ranked.map(s=><Card key={s.code}><p className="text-xs text-[#913045]">{s.category} · {s.sector}</p><h3 className="mt-2 text-xl font-semibold">{s.name}</h3><p className="mt-3 text-3xl font-semibold text-[#913045]">{s.dividendYield.toFixed(2)}%</p><p className="mt-2 text-sm text-slate-500">窗口内连续派息 {s.consecutiveYears} 年 · 价格位置 {s.lowPosition.toFixed(0)}%</p><p className="mt-3 text-sm">规则状态：{signalName(s.signal)}</p><div className="mt-4 flex flex-wrap gap-2"><button disabled={joining} className={secondaryButtonClass} onClick={()=>state.companies?.[s.code]?.inWatchlist?navigateInvestmentView("watchlist",s.code):join(s.code)}>{state.companies?.[s.code]?.inWatchlist?"查看观察池":"加入观察池"}</button><button disabled={joining} className={secondaryButtonClass} onClick={()=>{setSelected(s.code);setView("分类看板");}}>查看公司与K线</button></div><QualityDetails quality={s.quality}/><FrameworkDetails stock={s} benchmark={data?.benchmark}/><p className="mt-3 text-xs leading-6 text-slate-500">治理线索：在公司公告核对实际控制人、第一大股东持股和分红政策。股权性质不参与排名。</p><p className="mt-3 text-xs text-slate-400">{new Date(s.quoteTime).toLocaleString("zh-CN")}</p></Card>)}</div>}
+    {!ranked.length&&<Card>{hasScreening ? "当前筛选下没有候选。可切换筛选结果，查看未通过或待复核的原因。" : "尚无可用筛选结果。请扫描真实数据。"}</Card>}
+    {ranked.length>0&&view==="分类看板"&&<div className="grid items-start gap-5 xl:grid-cols-[1.6fr_1fr]"><Card><h3 className="text-lg font-semibold">{showAllMatches ? "量化通过 · 全部匹配" : "分类优选 · 每类最多8只"}</h3><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b text-xs text-slate-400"><tr>{["公司","分类/行业","财务核验","连续派息","近12月息率","现价","价格位置","状态"].map(v=><th className="py-3" key={v}>{v}</th>)}</tr></thead><tbody>{ranked.map(s=><tr key={s.code} onClick={()=>setSelected(s.code)} className="cursor-pointer border-b border-slate-100 hover:bg-rose-50"><td className="py-3"><button className="text-left" onClick={()=>setSelected(s.code)}><strong>{s.name}</strong><small className="block text-slate-400">{s.code}</small></button></td><td className="text-xs">{s.category}<br/>{s.sector}</td><td className="text-xs">{s.quality ? qualityLabels[s.quality.status] : "旧策略"}{s.screening && <span className="block text-slate-500">{screeningLabels[s.screening.status]}</span>}</td><td>{s.consecutiveYears}年</td><td className="font-semibold text-[#913045]">{s.dividendYield.toFixed(2)}%</td><td>{s.price.toFixed(2)}</td><td>{s.lowPosition.toFixed(0)}%</td><td className="text-xs">{signalName(s.signal)}</td></tr>)}</tbody></table></div></Card>{chosen&&<Card><h3 className="text-xl font-semibold">{chosen.name} <span className="text-sm font-normal text-slate-400">{chosen.code}</span></h3><p className="mt-2 text-xs text-slate-400">报价时间 {new Date(chosen.quoteTime).toLocaleString("zh-CN")}</p><div className="mt-4 flex flex-wrap gap-2"><button disabled={joining} className={buttonClass} onClick={()=>state.companies?.[chosen.code]?.inWatchlist?navigateInvestmentView("watchlist",chosen.code):join(chosen.code)}>{state.companies?.[chosen.code]?.inWatchlist?"查看观察池":"加入观察池"}</button><button disabled={joining} className={secondaryButtonClass} onClick={()=>join(chosen.code,true)}>{state.companies?.[chosen.code]?.inWatchlist?"打开研究":"加入并研究"}</button></div><QualityDetails quality={chosen.quality}/><ScreeningDetails screening={chosen.screening}/><FrameworkDetails stock={chosen} benchmark={data?.benchmark}/>{chosenCompany&&<div className="mt-4"><CompanyFacts company={chosenCompany}/></div>}<div className="mt-5"><CompanyKline code={chosen.code}/></div><p className="mt-3 text-xs text-slate-400">下面为扫描时保存的分红记录；当前公司资料、研究区间及失效条件使用统一公司档案。</p><h4 className="mt-5 font-medium">已实施分红记录</h4>{chosen.dividendRecords.slice(0,6).map((r,i)=><div key={i} className="flex justify-between border-b py-2 text-xs"><span>{r.exDate}</span><span>每股 ¥{r.cashPerShare.toFixed(3)}</span></div>)}</Card>}</div>}
+    {view==="红利筛选摘要"&&ranked.length>0&&<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{ranked.map(s=><Card key={s.code}><p className="text-xs text-[#913045]">{s.category} · {s.sector}</p><h3 className="mt-2 text-xl font-semibold">{s.name}</h3><p className="mt-3 text-3xl font-semibold text-[#913045]">{s.dividendYield.toFixed(2)}%</p><p className="mt-2 text-sm text-slate-500">窗口内连续派息 {s.consecutiveYears} 年 · 价格位置 {s.lowPosition.toFixed(0)}%</p><p className="mt-3 text-sm">规则状态：{signalName(s.signal)}</p><div className="mt-4 flex flex-wrap gap-2"><button disabled={joining} className={secondaryButtonClass} onClick={()=>state.companies?.[s.code]?.inWatchlist?navigateInvestmentView("watchlist",s.code):join(s.code)}>{state.companies?.[s.code]?.inWatchlist?"查看观察池":"加入观察池"}</button><button disabled={joining} className={secondaryButtonClass} onClick={()=>{setSelected(s.code);setView("分类看板");}}>查看公司与K线</button></div><QualityDetails quality={s.quality}/><ScreeningDetails screening={s.screening}/><FrameworkDetails stock={s} benchmark={data?.benchmark}/><p className="mt-3 text-xs leading-6 text-slate-500">治理线索：在公司公告核对实际控制人、第一大股东持股和分红政策。股权性质不参与排名。</p><p className="mt-3 text-xs text-slate-400">{new Date(s.quoteTime).toLocaleString("zh-CN")}</p></Card>)}</div>}
     {actionError&&<Card><p role="alert" className="text-sm text-red-700">公司资料读取失败：{actionError}</p><p className="mt-2 text-xs text-slate-400">未创建空白或重复档案，请稍后重试。</p></Card>}<Card><h3 className="font-semibold">口径与异常</h3>{data?.notes?.map(n=><p className="mt-2 text-xs leading-6 text-slate-500" key={n}>{n}</p>)}{data?.failures?.length? <details className="mt-3 text-xs text-amber-700"><summary>查看{data.failures.length}项排除 / 数据异常</summary><div className="mt-2 max-h-52 overflow-auto">{data.failures.map((f,i)=><p className="py-1" key={i}>{f}</p>)}</div></details>:null}<p className="mt-3 text-xs text-slate-400">从另一份quant-copilot迁入分类规则与红利筛选摘要流程。高股息不等于低风险；数据以公司公告复核，不构成投资建议。</p></Card>
   </div>;
 }

@@ -6,7 +6,7 @@ import pytest
 
 from app.cycle.dividends import build_dividends, classify, paginate
 from app.cycle.dividend_benchmark import fetch_benchmark, parse_benchmark
-from app.cycle.dividend_quality import annual_statements, assess_quality, quality_order
+from app.cycle.dividend_quality import annual_statements, assess_quality, quality_order, screen_candidate
 from app.cycle.engine import load_config
 
 
@@ -125,3 +125,20 @@ def test_bond_curve_uses_published_prior_date_and_rejects_changed_layout():
         }
     with pytest.raises(ValueError, match="未返回"):
         parse_benchmark(row("2026-11-06", 1.6, other="1.0"), date(2026, 11, 8))
+
+
+def test_automatic_screen_reports_thresholds_and_keeps_uncertainty():
+    config = load_config()
+    stock = {
+        "dividendYield": 4, "consecutiveYears": 5,
+        "quality": {"status": "supported", "historicalYield": 3.5, "payoutPct": 70,
+                    "ocfCover": 1.5, "cashProfitRatio": .8, "fcfCover": 1},
+    }
+    benchmark = {"yieldPct": 1.5}
+    result = screen_candidate(stock, benchmark, config)
+    assert result["status"] == "pass"
+    assert len(result["checks"]) == 7 and all(item["passed"] for item in result["checks"])
+    assert screen_candidate(stock, None, config)["status"] == "unknown"
+    assert screen_candidate({**stock, "dividendYield": 6.01}, benchmark, config)["status"] == "fail"
+    assert screen_candidate({**stock, "quality": {**stock["quality"], "status": "risk"}}, benchmark, config)["status"] == "fail"
+    assert screen_candidate({**stock, "quality": {**stock["quality"], "financialIndustry": True}}, benchmark, config)["status"] == "manual"

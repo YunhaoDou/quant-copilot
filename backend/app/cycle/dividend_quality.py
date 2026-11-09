@@ -120,3 +120,39 @@ def quality_order(stock):
     quality = stock["quality"]
     return (QUALITY_ORDER[quality["status"]], -(quality["historicalYield"] or 0),
             -stock["consecutiveYears"], -stock["dividendYield"], stock["code"])
+
+
+def screen_candidate(stock, benchmark, config):
+    """用扫描快照核验可量化的参考条件，保留未知项和财务红旗。"""
+    quality = stock.get("quality") or {}
+    historical = number(quality.get("historicalYield"))
+    bond_yield = number((benchmark or {}).get("yieldPct"))
+    spread = historical - bond_yield if historical is not None and bond_yield is not None else None
+    checks = []
+
+    def check(label, value, unit, lower_key, upper_key=None):
+        value = number(value)
+        lower = config[lower_key]
+        upper = config[upper_key] if upper_key else None
+        result = None if value is None else value >= lower and (upper is None or value <= upper)
+        checks.append(dict(label=label, value=value, unit=unit, minimum=lower, maximum=upper, passed=result))
+
+    check("近12月已实施股息率", stock.get("dividendYield"), "%", "dividend_screen_yield_min_pct", "dividend_screen_yield_max_pct")
+    check("历史中位股息率减十年期国债", spread, "个百分点", "dividend_screen_spread_min_pp")
+    check("连续派息", stock.get("consecutiveYears"), "年", "dividend_screen_min_years")
+    check("同财年估算派息率", quality.get("payoutPct"), "%", "dividend_screen_payout_min_pct", "dividend_screen_payout_max_pct")
+    check("经营现金流覆盖派息", quality.get("ocfCover"), "倍", "dividend_screen_ocf_cover_min")
+    check("经营现金流 / 归母净利润", quality.get("cashProfitRatio"), "倍", "dividend_screen_cash_profit_min")
+    check("自由现金流覆盖派息", quality.get("fcfCover"), "倍", "dividend_min_fcf_cover")
+    tier = quality.get("status")
+    if tier == "risk" or any(item["passed"] is False for item in checks):
+        status = "fail"
+    elif quality.get("financialIndustry"):
+        status = "manual"
+    elif any(item["passed"] is None for item in checks) or tier == "unknown":
+        status = "unknown"
+    elif tier != "supported":
+        status = "manual"
+    else:
+        status = "pass"
+    return {"status": status, "checks": checks}

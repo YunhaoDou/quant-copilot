@@ -14,7 +14,7 @@ from fastapi import APIRouter
 import httpx
 
 from app.cycle.dividend_benchmark import fetch_benchmark
-from app.cycle.dividend_quality import annual_statements, assess_quality, quality_order
+from app.cycle.dividend_quality import annual_statements, assess_quality, quality_order, screen_candidate
 from app.cycle.engine import load_config
 from app.cycle.live import TZ, number
 from app.cycle.market import fetch_daily
@@ -204,7 +204,14 @@ def board():
                 row = db.execute("SELECT payload FROM board WHERE id=1").fetchone()
                 if row:
                     _state.update(json.loads(row[0]))
-        return copy.deepcopy(_state)
+        snapshot = copy.deepcopy(_state)
+    if snapshot.get("strategyVersion", 0) >= 3:
+        config = load_config()
+        # 自由现金流的覆盖线与生成财务分层时保持一致。
+        config.update({k: v for k, v in snapshot.get("config", {}).items() if k == "dividend_min_fcf_cover"})
+        for stock in snapshot["stocks"]:
+            stock["screening"] = screen_candidate(stock, snapshot.get("benchmark"), config)
+    return snapshot
 
 
 @router.post("/scan",status_code=202)
