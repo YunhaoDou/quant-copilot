@@ -80,10 +80,23 @@ export default function GuidePanel({ onNavigate }: { onNavigate: (view: Investme
         <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">新手指南</h2>
         <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-700">第一次接触股票，可以从三件事开始：读懂一根日K线、算清一笔假设亏损、记下一条观察。三项练习均无需实盘交易。遇到陌生术语时，可以随时跳到「炒股基础」。</p>
         <a className={`${secondaryButtonClass} mt-4 inline-block`} href="#practice">开始第一课</a>
-        <nav aria-label="指南目录" className="mt-5 flex flex-wrap gap-2">
-          {sections.map(([id, label]) => <a className={secondaryButtonClass} href={`#${id}`} key={id}>{label}</a>)}
-        </nav>
       </header>
+
+      <Card>
+        <nav id="guide-contents" aria-labelledby="guide-contents-title" className="scroll-mt-6">
+          <h3 id="guide-contents-title" className="text-lg font-semibold">目录</h3>
+          <ol className="mt-3 grid gap-x-8 sm:grid-cols-2">
+            {sections.map(([id, label], index) => (
+              <li className="border-b border-slate-100" key={id}>
+                <a className="flex items-baseline gap-3 rounded-md px-2 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-50 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700" href={`#${id}`}>
+                  <span aria-hidden="true" className="text-xs tabular-nums text-slate-500">{String(index + 1).padStart(2, "0")}</span>
+                  {label}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      </Card>
 
       <section id="practice" className="scroll-mt-6">
         <Card>
@@ -180,6 +193,7 @@ export default function GuidePanel({ onNavigate }: { onNavigate: (view: Investme
           </dl>
         </Card>
       </section>
+      <a className="inline-block rounded-md px-2 py-2 text-sm font-medium text-emerald-800 underline underline-offset-4" href="#guide-contents">返回目录</a>
     </article>
   );
 }
