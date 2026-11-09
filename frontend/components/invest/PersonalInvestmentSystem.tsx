@@ -96,7 +96,7 @@ export default function PersonalInvestmentSystem() {
           {tab === "dividends" && <DividendPanel state={state} setState={setState} />}
           {tab === "watchlist" && <WatchlistPanel state={state} setState={setState} />}
           {tab === "research" && <ResearchPanel state={state} setState={setState} />}
-          {tab === "tools" && <ToolsPanel totalAssets={state.profile.currentAssets} />}
+          {tab === "tools" && <ToolsPanel profile={state.profile} />}
           {tab === "journal" && <JournalPanel state={state} setState={setState} />}
           {tab === "functions" && <FunctionCenterPanel />}
         </div>

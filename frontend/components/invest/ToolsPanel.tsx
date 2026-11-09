@@ -2,16 +2,19 @@
 
 import { useMemo, useState } from "react";
 
-import { positionShock, valuationScenarios } from "@/lib/personal-investment";
+import { getRiskBudget, positionShock, valuationScenarios, type InvestorProfile } from "@/lib/personal-investment";
 import { Card, Field, inputClass, Metric, money, ProgressBar } from "./ui";
 import LiveQuotes from "./live-quotes";
 
-export default function ToolsPanel({ totalAssets }: { totalAssets: number }) {
+export default function ToolsPanel({ profile }: { profile: InvestorProfile }) {
   const [positionPct, setPositionPct] = useState(5);
   const [referenceCode, setReferenceCode] = useState("600519");
   const [lossPct, setLossPct] = useState(20);
   const [valuation, setValuation] = useState({ currentEps: 2, years: 3, growthPct: 8, pe: 12, dividendYieldPct: 4 });
-  const shock = useMemo(() => positionShock(totalAssets, positionPct, lossPct), [lossPct, positionPct, totalAssets]);
+  const { currentAssets } = profile;
+  const shock = useMemo(() => positionShock(currentAssets, positionPct, lossPct), [lossPct, positionPct, currentAssets]);
+  const risk = getRiskBudget(profile);
+  const budgetUse = risk.maxLoss > 0 ? shock.lossAmount / risk.maxLoss * 100 : null;
   const scenarios = useMemo(() => valuationScenarios(valuation), [valuation]);
 
   return (
@@ -37,8 +40,9 @@ export default function ToolsPanel({ totalAssets }: { totalAssets: number }) {
         </div>
 
         <div className="mt-5 rounded-xl bg-slate-50 p-4">
-          <div className="flex justify-between text-sm"><span>20%总回撤预算占用</span><span className="font-medium">{((shock.portfolioLossPct / 20) * 100).toFixed(0)}%</span></div>
-          <div className="mt-2"><ProgressBar value={(shock.portfolioLossPct / 20) * 100} color={shock.portfolioLossPct > 4 ? "bg-red-500" : "bg-emerald-500"} /></div>
+          <div className="flex justify-between gap-3 text-sm"><span>本次冲击占总回撤预算（上限 {risk.limit}%）</span><span className="font-medium">{budgetUse === null ? "待填写资产峰值" : `${budgetUse.toFixed(0)}%`}</span></div>
+          {budgetUse !== null && <div className="mt-2"><ProgressBar value={budgetUse} color={shock.lossAmount > risk.remaining ? "bg-red-500" : "bg-emerald-500"} /></div>}
+          <p className="mt-2 text-xs text-slate-500">总预算以资产峰值计算。当前剩余 {money(risk.remaining)}。</p>
           <p className="mt-3 text-xs text-slate-500">5%仓位即使下跌40%，组合损失约2%；30%仓位同样下跌会损失12%。</p>
         </div>
       </Card>

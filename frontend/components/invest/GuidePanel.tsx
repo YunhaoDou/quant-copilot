@@ -2,9 +2,31 @@ import { INVESTMENT_VIEWS, type InvestmentView } from "@/lib/invest-navigation";
 import { Card, secondaryButtonClass } from "./ui";
 
 const sections = [
-  ["first-run", "第一次使用"], ["basics", "炒股基础"], ["pages", "页面地图"],
-  ["advanced", "进阶工具"], ["data", "数据与常见问题"],
+  ["start", "启动系统"], ["practice", "第一课"], ["first-run", "完整流程"],
+  ["basics", "炒股基础"], ["pages", "页面地图"], ["advanced", "进阶工具"],
+  ["data", "数据与常见问题"],
 ] as const;
+
+const exercises: { view: InvestmentView; title: string; instructions: string; check: string }[] = [
+  {
+    view: "watchlist",
+    title: "看懂一家公司的一根日K线",
+    instructions: "在「按代码加入A股观察池」输入 600519，等名称与报价出现。点「加入观察池」，然后点「查看K线」。选「1个月」，从图上方读出最近一根K线的开盘、最高、最低和收盘价。在电脑上可把鼠标移到其他K线，或聚焦图表后用左右方向键切换。这个代码仅用于演示操作。若已在跟踪该公司，可以选用已有记录。",
+    check: "可以指出K线对应的交易日及四个价格，并区分图表截至日期与最新报价时间。历史K线上的收盘价与当前报价使用的时间和复权口径可能不同。",
+  },
+  {
+    view: "tools",
+    title: "先算损失，再谈仓位",
+    instructions: "在「仓位冲击模拟器」把「单只股票仓位」调到 10%，把「个股下跌幅度」调到 20%。记下「组合损失」，再把仓位改到 5%，保持下跌幅度不变。练习只用滑块，保留驾驶舱里的个人资产数据。",
+    check: "组合损失从 2% 变成 1%。如果当前资产为 10 万元，亏损金额从 2,000 元变成 1,000 元。计算假设其他资产和现金的价值不变。",
+  },
+  {
+    view: "journal",
+    title: "留下第一条零资金的观察记录",
+    instructions: "在「决策复盘」打开记录表单，填写刚才观察的股票代码，动作选择「观察」，金额留空。在「决策理由」写下你想查证的问题，在「支持证据」记录来源和日期，在「退出/失效条件」写下什么情况会让你停止跟踪。点「保存原始决策」。",
+    check: "决策时间线出现一条标为「观察」「未涉及资金」的记录。复核时先回答当初的问题有没有新证据，再考虑是否调整观察计划。",
+  },
+];
 
 const steps: { view: InvestmentView; title: string; text: string }[] = [
   { view: "dashboard", title: "核对资金与回撤防线", text: "核对当前资产、资产峰值、每月新增资金和回撤上限。初始配置是示例。实际持仓和资金仍需手动记录或通过本地快照导入。" },
@@ -62,9 +84,42 @@ export default function GuidePanel({ onNavigate }: { onNavigate: (view: Investme
         </nav>
       </header>
 
+      <section id="start" className="scroll-mt-6">
+        <Card>
+          <h3 className="text-xl font-semibold">启动系统</h3>
+          <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-7 text-slate-700">
+            <li>在已安装启动器的 Mac 上按 <kbd className="rounded border bg-slate-50 px-1.5 py-0.5">⌘ 空格</kbd>，输入 <strong>Quant Copilot</strong>，按回车。</li>
+            <li>等待默认浏览器打开「A股驾驶舱」。已经启动时，也可以直接打开浏览器收藏的驾驶舱。</li>
+            <li>第一次练习可以保留原有账户数据，从观察一家公司和拖动模拟滑块开始。</li>
+          </ol>
+          <a className={`${secondaryButtonClass} mt-4 inline-block`} href="#practice">开始第一课</a>
+        </Card>
+      </section>
+
+      <section id="practice" className="scroll-mt-6">
+        <Card>
+          <h3 className="text-xl font-semibold">第一课 · 从看图到记一条观察</h3>
+          <p className="mt-2 text-sm leading-7 text-slate-600">跟着做三步即可。观察池和复盘记录会保存在当前浏览器，模拟滑块只改变这次计算。</p>
+          <ol className="mt-4 space-y-3">
+            {exercises.map((exercise, index) => (
+              <li key={exercise.view} className="rounded-2xl border border-slate-200 p-4 sm:p-5">
+                <p className="text-xs font-semibold text-emerald-800">练习 {index + 1}</p>
+                <h4 className="mt-1 font-semibold">{exercise.title}</h4>
+                <p className="mt-2 text-sm leading-7 text-slate-700">{exercise.instructions}</p>
+                <details className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm">
+                  <summary className="cursor-pointer font-medium text-emerald-900">查看自检答案</summary>
+                  <p className="mt-2 leading-6 text-slate-700">{exercise.check}</p>
+                </details>
+                <button className={`${secondaryButtonClass} mt-3`} onClick={() => onNavigate(exercise.view)}>前往{INVESTMENT_VIEWS.find(({ id }) => id === exercise.view)?.label}</button>
+              </li>
+            ))}
+          </ol>
+        </Card>
+      </section>
+
       <section id="first-run" className="scroll-mt-6">
         <Card>
-          <h3 className="text-xl font-semibold">第一次使用</h3>
+          <h3 className="text-xl font-semibold">完整流程 · 从资金到复盘</h3>
           <ol className="mt-4 grid gap-3 sm:grid-cols-2">
             {steps.map((step, index) => <li key={step.view} className="rounded-2xl border border-slate-200 p-4">
               <p className="text-xs font-semibold text-emerald-800">步骤 {index + 1}</p>
@@ -90,7 +145,7 @@ export default function GuidePanel({ onNavigate }: { onNavigate: (view: Investme
         </Card>
       </section>
 
-      {([[sections[2], pageRoles], [sections[3], toolRoles]] as const).map(([[id, title], rows]) => (
+      {([["pages", "页面地图", pageRoles], ["advanced", "进阶工具", toolRoles]] as const).map(([id, title, rows]) => (
         <section id={id} className="scroll-mt-6" key={id}>
           <Card>
             <h3 className="text-xl font-semibold">{title}</h3>
@@ -105,6 +160,9 @@ export default function GuidePanel({ onNavigate }: { onNavigate: (view: Investme
         <Card>
           <h3 className="text-xl font-semibold">数据与常见问题</h3>
           <dl className="mt-3 space-y-4 text-sm leading-7 text-slate-600">
+            <div><dt className="font-semibold text-slate-900">Spotlight 找不到应用，或打开后浏览器没出现怎么办？</dt><dd>先在 Finder 的个人「应用程序」文件夹确认 Quant Copilot.app 是否存在。若启动器显示错误，按提示查看启动日志。如果浏览器能打开，但多处行情同时加载失败，可以访问 <a className="font-medium text-emerald-800 underline" href="http://localhost:8000/health" target="_blank" rel="noreferrer">本地后端状态</a>。后端有响应时，再查看行情卡的供应商状态和报价时间。</dd></div>
+            <div><dt className="font-semibold text-slate-900">输入代码后为什么还不能加入？</dt><dd>先确认输入的是六位A股股票代码，并保留开头的0。等待识别完成再操作。若显示「打开已有记录」，直接打开原档案。若只有部分数据缺失，以页面标注为准。</dd></div>
+            <div><dt className="font-semibold text-slate-900">情绪周期的「板块启动」怎么看？</dt><dd>系统同时检查板块涨幅、匹配到的涨停股数量和最早首次涨停时间。具体阈值在情绪周期的「设置与说明」中查看。三项都满足才标为启动。真实行情中，时间取该行业在涨停池中匹配到的股票的最早首次涨停时间。没有匹配或缺少时间时会显示「未知」。</dd></div>
             <div><dt className="font-semibold text-slate-900">为什么看到几个不同的日期？</dt><dd>公开行情有供应商时间和本机获取时间，休市时通常显示最近报价。日K线有自己的截至交易日，红利列表有扫描快照日期。查看公司详情时以各指标旁的来源、日期与口径为准。缺失值或延迟未知要保留为未知。</dd></div>
             <div><dt className="font-semibold text-slate-900">回撤预警怎么算？</dt><dd>驾驶舱与市场雷达共用当前资产、资产峰值和回撤上限。预警点是上限的50%、75%、90%和100%。上限20%时对应10%、15%、18%和20%。出入金会改变资产口径，更新资产与峰值时要一起核对。价格跳空等情况可能直接越过预警线。</dd></div>
             <div><dt className="font-semibold text-slate-900">公司笔记保存在哪里？</dt><dd>驾驶舱、公司档案和决策复盘保存在当前浏览器。同一股票代码只用一份公司档案，移出观察池后仍可在个股研究找到笔记。清理网站数据或换浏览器可能看不到原记录。情绪周期人工确认独立保存，综合研究档案和模拟账户保存在本地后端。</dd></div>
