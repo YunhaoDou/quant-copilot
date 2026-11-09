@@ -106,7 +106,9 @@ def assess_quality(stock, statements, config):
         status = "supported" if complete and baseline is not None else "unknown"
     return {
         "status": status, "fiscalYear": year, "noticeDate": (income.get("NOTICE_DATE") or "")[:10] or None,
-        "payoutPct": payout, "fcfCover": None if financial else cover,
+        "payoutPct": payout,
+        "ocfCover": ocf / cash if not financial and ocf is not None and cash else None,
+        "cashProfitRatio": ocf / profit if not financial and ocf is not None and profit is not None and profit > 0 else None, "fcfCover": None if financial else cover,
         "debtPct": None if financial else debt, "operatingCash": None if financial else ocf,
         "monetaryFunds": None if financial else number(balance.get("MONETARYFUNDS")),
         "deductedProfits": earnings, "historicalYield": baseline / stock["price"] * 100 if baseline else None,

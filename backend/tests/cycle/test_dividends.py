@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from app.cycle.dividends import build_dividends, classify, paginate
+from app.cycle.dividend_benchmark import fetch_benchmark, parse_benchmark
 from app.cycle.dividend_quality import annual_statements, assess_quality, quality_order
 from app.cycle.engine import load_config
 
@@ -77,6 +78,8 @@ def test_quality_separates_cash_backed_risky_missing_and_financial():
     assert supported["status"] == "supported"
     assert supported["payoutPct"] == 50
     assert supported["fcfCover"] == pytest.approx(1.3)
+    assert supported["ocfCover"] == pytest.approx(1.7)
+    assert supported["cashProfitRatio"] == pytest.approx(0.85)
     assert supported["historicalYield"] == 4
     risk = assess_quality({**stock, "fiscalDistributions": {2025: 1100}}, statements(), config)
     assert risk["status"] == "risk"
@@ -104,3 +107,21 @@ def test_financial_batches_never_read_after_as_of_and_flag_partial_response():
     assert set(data["income"]) == {("600001", 2024)}
     assert data["balance"] == {}
     assert len(errors) == 1
+
+
+def test_bond_curve_uses_published_prior_date_and_rejects_changed_layout():
+    def row(day, rate, other="", label="中债国债收益率曲线"):
+        return "<tr>" + "".join(f"<td>{value}</td>" for value in [label, day, other, "", "", "", "", "", rate, ""]) + "</tr>"
+
+    html = row("2026-11-09", 2.2) + row("2026-11-06", 1.6) + row("2026-10-16", 1.7)
+    def response(request):
+        assert request.url.params["endDate"] == "2026-11-08"
+        assert request.url.params["gjqx"] == "10"
+        return httpx.Response(200, text=html)
+
+    with httpx.Client(transport=httpx.MockTransport(response)) as client:
+        assert fetch_benchmark(client, "2026-11-09") == {
+            "date": "2026-11-06", "yieldPct": 1.6, "previousDate": "2026-10-16", "changeBp": -10,
+        }
+    with pytest.raises(ValueError, match="未返回"):
+        parse_benchmark(row("2026-11-06", 1.6, other="1.0"), date(2026, 11, 8))
