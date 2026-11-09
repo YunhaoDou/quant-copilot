@@ -5,6 +5,8 @@ import { Card, secondaryButtonClass } from "./ui";
 import { knowledgeChapters } from "./guide-knowledge";
 import { projectSections } from "./guide-project";
 import { courses } from "./guide-courses";
+import { deeperReadings } from "./guide-readings";
+import GuideCharts from "./GuideCharts";
 
 const guideUrl = "/invest?view=guide";
 const progressKey = "quant-copilot-guide-progress-v1";
@@ -12,22 +14,19 @@ const progressKey = "quant-copilot-guide-progress-v1";
 const courseParts = [
   { id: "concepts", title: "概念讲解" },
   { id: "example", title: "算例" },
-  { id: "quiz", title: "课后自测" },
 ];
 const defaultPart = courseParts[0].id;
 
-type CourseAnswer = { text: string; submitted: boolean };
 type LearningProgress = {
   completed: string[];
   lastVisited: string | null;
   lastPart?: string;
-  answers: Record<string, CourseAnswer>;
+  answers?: unknown;
 };
-const emptyProgress: LearningProgress = { completed: [], lastVisited: null, answers: {} };
-const emptyAnswer: CourseAnswer = { text: "", submitted: false };
+const emptyProgress: LearningProgress = { completed: [], lastVisited: null };
 
 function normalizePart(part: unknown) {
-  if (part === "reference") return "concepts";
+  if (part === "reference" || part === "quiz") return "concepts";
   return courseParts.find(({ id }) => id === part)?.id;
 }
 
@@ -36,15 +35,8 @@ function readProgress(): LearningProgress {
   if (!raw) return emptyProgress;
   try {
     const saved = JSON.parse(raw);
-    const answers: LearningProgress["answers"] = {};
-    for (const { id } of courses) {
-      const answer = saved?.answers?.[id];
-      if (typeof answer?.text === "string") {
-        answers[id] = { text: answer.text, submitted: answer.submitted === true && Boolean(answer.text.trim()) };
-      }
-    }
     return {
-      answers,
+      answers: saved?.answers,
       completed: Array.isArray(saved?.completed) ? courses.filter(({ id }) => saved.completed.includes(id)).map(({ id }) => id) : [],
       lastVisited: courses.find(({ id }) => id === saved?.lastVisited)?.id ?? null,
       lastPart: normalizePart(saved?.lastPart),
@@ -64,37 +56,16 @@ function courseUrl(id: string, part = defaultPart) {
 
 const directory = [
   { id: "project", title: "项目", entries: [
-    { id: "practice", title: "第一课" },
     { id: "evidence", title: "读数据与写证据" },
     ...projectSections,
     { id: "data", title: "数据与常见问题" },
   ] },
   { id: "knowledge", title: "知识", entries: [
+    { id: "charts", title: "看图入门" },
     { id: "basics", title: "常用术语" },
     ...courses.map(({ id, title }) => ({ id, title, href: courseUrl(id) })),
     { id: "after-roadmap", title: "D150 之后" },
   ] },
-];
-
-const exercises: { view: InvestmentView; title: string; instructions: string; check: string }[] = [
-  {
-    view: "watchlist",
-    title: "看懂一家公司的一根日K线",
-    instructions: "在「按代码加入A股观察池」输入 600519，等名称与报价出现。点「加入观察池」，然后点「查看K线」。选「1个月」，从图上方读出最近一根K线的开盘、最高、最低和收盘价。在电脑上可把鼠标移到其他K线，或聚焦图表后用左右方向键切换。这个代码仅用于演示操作。若已在跟踪该公司，可以选用已有记录。",
-    check: "可以指出K线对应的交易日及四个价格，并区分图表截至日期与最新报价时间。历史K线上的收盘价与当前报价使用的时间和复权口径可能不同。",
-  },
-  {
-    view: "tools",
-    title: "先算损失，再谈仓位",
-    instructions: "在「仓位冲击模拟器」把「单只股票仓位」调到 10%，把「个股下跌幅度」调到 20%。记下「组合损失」，再把仓位改到 5%，保持下跌幅度不变。练习只用滑块，保留驾驶舱里的个人资产数据。",
-    check: "组合损失从 2% 变成 1%。如果当前资产为 10 万元，亏损金额从 2,000 元变成 1,000 元。计算假设其他资产和现金的价值不变。",
-  },
-  {
-    view: "journal",
-    title: "留下第一条零资金的观察记录",
-    instructions: "在「决策复盘」打开记录表单，填写刚才观察的股票代码，动作选择「观察」，金额留空。在「决策理由」写下你想查证的问题，在「支持证据」记录来源和日期，在「退出/失效条件」写下什么情况会让你停止跟踪。点「保存原始决策」。",
-    check: "决策时间线出现一条标为「观察」「未涉及资金」的记录。复核时先回答当初的问题有没有新证据，再考虑是否调整观察计划。",
-  },
 ];
 
 const basics = [
@@ -135,26 +106,10 @@ export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (
     return () => window.removeEventListener("storage", syncProgress);
   }, [courseId, part]);
 
-  function saveAnswer(answer: CourseAnswer) {
-    if (!courseId) return;
-    const local = { ...progress, answers: { ...progress.answers, [courseId]: answer } };
-    setProgress(local);
-    try {
-      const saved = readProgress();
-      const next = { ...saved, answers: { ...saved.answers, [courseId]: answer } };
-      window.localStorage.setItem(progressKey, JSON.stringify(next));
-      setProgress(next);
-      setStorageError(false);
-    } catch {
-      setStorageError(true);
-    }
-  }
-
   function toggleCompletion() {
     if (!courseId) return;
     try {
       const saved = readProgress();
-      if (!saved.completed.includes(courseId) && !saved.answers[courseId]?.submitted) return;
       const completed = saved.completed.includes(courseId)
         ? saved.completed.filter((id) => id !== courseId)
         : [...saved.completed, courseId];
@@ -211,33 +166,14 @@ export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (
 
         <div className="min-w-0 space-y-5 px-1 py-2 md:px-3">
           {storageError && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">浏览器存储暂不可用，学习进度无法保存。</p>}
-          {course ? <CourseContent index={courseIndex} part={part} completed={progress.completed.includes(course.id)} onToggleCompletion={toggleCompletion} answer={progress.answers[course.id] ?? emptyAnswer} onSaveAnswer={saveAnswer} /> : <>
+          {course ? <CourseContent index={courseIndex} part={part} completed={progress.completed.includes(course.id)} onToggleCompletion={toggleCompletion} /> : <>
             {activePage === "project" && <section>
               <h3 className="text-xl font-semibold">项目</h3>
-              <p className="mt-2 text-sm leading-7 text-slate-700">按功能查操作，也可以从第一课做一遍零资金练习。</p>
+              <p className="mt-2 text-sm leading-7 text-slate-700">选择目录中的功能，查看它的用途、操作和数据口径。</p>
               <ul className="mt-3 divide-y divide-slate-200">
                 {directory[0].entries.map(({ id, title }) => <li key={id}><a className="block py-3 text-sm font-medium text-emerald-900 hover:underline" href={pageUrl(id)}>{title}</a></li>)}
               </ul>
             </section>}
-            {activePage === "practice" && <section id="practice" className="scroll-mt-6">
-              <h4 className="text-xl font-semibold">第一课 · 从看图到记一条观察</h4>
-              <p className="mt-2 text-sm leading-7 text-slate-600">跟着做三步即可。观察池和复盘记录会保存在当前浏览器，模拟滑块只改变这次计算。</p>
-              <ol className="mt-4 divide-y divide-slate-200">
-                {exercises.map((exercise, index) => (
-                  <li key={exercise.view} className="py-4">
-                    <p className="text-xs font-semibold text-emerald-800">练习 {index + 1}</p>
-                    <h5 className="mt-1 font-semibold">{exercise.title}</h5>
-                    <p className="mt-2 text-sm leading-7 text-slate-700">{exercise.instructions}</p>
-                    <details className="mt-3 text-sm">
-                      <summary className="cursor-pointer font-medium text-emerald-900">查看自检答案</summary>
-                      <p className="mt-2 leading-6 text-slate-700">{exercise.check}</p>
-                    </details>
-                    <button className={`${secondaryButtonClass} mt-3`} onClick={() => onNavigate(exercise.view)}>前往{INVESTMENT_VIEWS.find(({ id }) => id === exercise.view)?.label}</button>
-                  </li>
-                ))}
-              </ol>
-            </section>}
-
             {activePage === "evidence" && <section id="evidence" className="scroll-mt-6">
               <h4 className="text-xl font-semibold">读数据与写证据</h4>
               <dl className="mt-3 divide-y divide-slate-100 text-sm leading-7 text-slate-700">
@@ -247,7 +183,7 @@ export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (
               </dl>
               <details className="mt-4 border-t border-slate-200 pt-4 text-sm leading-7 text-slate-700">
                 <summary className="cursor-pointer font-semibold text-emerald-900">看一个填写示例</summary>
-                <p className="mt-2">以下为假设练习。你在红利看板看到某家公司历史股息率较高，想核实这笔分红是否有一次性因素。</p>
+                <p className="mt-2">以下为虚构案例。你在红利看板看到某家公司历史股息率较高，想核实这笔分红是否有一次性因素。</p>
                 <dl className="mt-2 space-y-1">
                   <div><dt className="inline font-semibold">观察理由 </dt><dd className="inline">核实高股息来自常规分红还是一次性分红。</dd></div>
                   <div><dt className="inline font-semibold">支持证据 </dt><dd className="inline">已看到历史派息记录，待核对分红实施公告和年报现金流。</dd></div>
@@ -286,6 +222,7 @@ export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (
                 <div><dt className="font-semibold text-slate-900">模拟数据、真实行情和AI怎么看？</dt><dd>情绪周期的真实入口展示已采集行情和快照，真实历史回测仍受数据覆盖限制。CSV结果依赖导入数据，演示数据用于熟悉界面。估值和组合推演随假设变化，AI输出属于待核实分析。历史统计不代表未来，结果仅供研究。</dd></div>
               </dl>
             </section>}
+            {activePage === "charts" && <GuideCharts onNavigate={onNavigate} />}
             {activePage === "basics" && <section id="basics" className="scroll-mt-6">
               <h4 className="text-xl font-semibold">常用术语</h4>
               <dl className="mt-4 divide-y divide-slate-100">
@@ -300,7 +237,7 @@ export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (
 
             {activePage === "knowledge" && <section>
               <h3 className="text-xl font-semibold">知识 · 课程目录</h3>
-              <p className="mt-2 text-sm leading-7 text-slate-700">从市场基础学到回测验证。每课先读概念和算例，再到自测页写出自己的答案。</p>
+              <p className="mt-2 text-sm leading-7 text-slate-700">从市场基础学到回测验证。每课讲解原理、计算方法和适用边界，并配有完整算例。</p>
               <p className="mt-2 text-xs leading-6 text-slate-500">进度保存在当前浏览器，重启项目后可继续。</p>
               <ol className="mt-4 divide-y divide-slate-200">
                 {courses.map(({ id, title }, index) => (
@@ -326,13 +263,11 @@ export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (
   );
 }
 
-function CourseContent({ index, part, completed, onToggleCompletion, answer, onSaveAnswer }: {
+function CourseContent({ index, part, completed, onToggleCompletion }: {
   index: number;
   part: string;
   completed: boolean;
   onToggleCompletion: () => void;
-  answer: CourseAnswer;
-  onSaveAnswer: (answer: CourseAnswer) => void;
 }) {
   const course = courses[index];
   const previous = courses[index - 1];
@@ -345,12 +280,13 @@ function CourseContent({ index, part, completed, onToggleCompletion, answer, onS
       <section>
         <a className="text-sm font-medium text-emerald-800 underline underline-offset-4" href={pageUrl("knowledge")}>返回课程目录</a>
         <h3 className="mt-3 text-2xl font-semibold text-slate-950">{course.title}</h3>
+        {course.id === "charts-risk" && <a className="mt-2 inline-block text-sm font-medium text-emerald-800 underline" href={pageUrl("charts")}>打开交互图解</a>}
         <nav aria-label="本课分页" className="mt-4 flex flex-wrap gap-2">
           {courseParts.map(({ id, title }) => <a key={id} className={`${secondaryButtonClass} aria-[current=page]:border-emerald-400 aria-[current=page]:bg-emerald-50`} aria-current={part === id ? "page" : undefined} href={courseUrl(course.id, id)}>{title}</a>)}
         </nav>
         {part === "concepts" && <>
           <div className="mt-3 divide-y divide-slate-100">
-            {course.sections.map(([title, text]) => (
+            {[...course.sections, ...(deeperReadings[course.id] ?? [])].map(([title, text]) => (
               <section className="py-4" key={title}>
                 <h4 className="font-semibold text-slate-950">{title}</h4>
                 <p className="mt-2 text-sm leading-7 text-slate-700">{text}</p>
@@ -371,39 +307,14 @@ function CourseContent({ index, part, completed, onToggleCompletion, answer, onS
           </section>
         </>}
         {part === "example" && <section className="mt-5 border-t border-slate-200 pt-4">
-          <h4 className="font-semibold text-emerald-900">跟着算例走一遍</h4>
+          <h4 className="font-semibold text-emerald-900">算例讲解</h4>
           <p className="mt-2 text-sm leading-7 text-slate-700">{course.example}</p>
-          <a className={`${secondaryButtonClass} mt-4 inline-flex`} href={courseUrl(course.id, "quiz")}>去写自测答案</a>
+
         </section>}
       </section>
-      {part === "quiz" && <section>
-        <h4 className="text-lg font-semibold">课后自测</h4>
-        <p className="mt-2 text-sm leading-7 text-slate-700">{course.question}</p>
-        <form className="mt-4" onSubmit={(event) => {
-          event.preventDefault();
-          if (answer.text.trim()) onSaveAnswer({ ...answer, submitted: true });
-        }}>
-          <label className="block text-sm font-semibold text-slate-900" htmlFor="course-answer">我的答案</label>
-          <textarea id="course-answer" rows={5} maxLength={4000} value={answer.text}
-            onChange={(event) => {
-              const text = event.target.value;
-              onSaveAnswer({ text, submitted: answer.submitted && Boolean(text.trim()) });
-            }}
-            placeholder="用自己的话写结论，并说明推理或计算过程。"
-            className="mt-2 block w-full resize-y rounded-lg border border-slate-300 bg-white p-3 text-sm leading-6 text-slate-900 focus-visible:outline-emerald-700" />
-          <p className="mt-2 text-xs text-slate-500">作答会保存在当前浏览器。提交后可以对照解析，继续修改自己的答案。</p>
-          {!answer.submitted && <button type="submit" className={`${secondaryButtonClass} mt-3 disabled:opacity-50`} disabled={!answer.text.trim()}>提交答案并看解析</button>}
-        </form>
-        {answer.submitted && <div className="mt-5 border-t border-slate-200 pt-4">
-          <h5 className="font-semibold text-emerald-900">参考答案与解析</h5>
-          <p className="mt-2 text-sm leading-7 text-slate-700">{course.answer}</p>
-        </div>}
-      </section>}
       <nav aria-label="课程顺序" className="flex flex-wrap justify-between gap-2">
         {previous && <a className={secondaryButtonClass} href={courseUrl(previous.id)}>上一课 · {previous.title}</a>}
-        {completed || answer.submitted
-          ? <button type="button" className={secondaryButtonClass} onClick={onToggleCompletion}>{completed ? "撤销完成标记" : "标记本课完成"}</button>
-          : part !== "quiz" && <a className={secondaryButtonClass} href={courseUrl(course.id, "quiz")}>前往自测</a>}
+        <button type="button" className={secondaryButtonClass} onClick={onToggleCompletion}>{completed ? "撤销已读标记" : "标记本课已读"}</button>
         {next && <a className={`${secondaryButtonClass} ml-auto`} href={courseUrl(next.id)}>下一课 · {next.title}</a>}
       </nav>
     </>
