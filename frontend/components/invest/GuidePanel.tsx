@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { INVESTMENT_VIEWS, type InvestmentView } from "@/lib/invest-navigation";
 import { Card, secondaryButtonClass } from "./ui";
@@ -7,6 +7,24 @@ import { projectSections } from "./guide-project";
 import { courses } from "./guide-courses";
 
 const guideUrl = "/invest?view=guide";
+const progressKey = "quant-copilot-guide-progress-v1";
+
+type LearningProgress = { completed: string[]; lastVisited: string | null };
+const emptyProgress: LearningProgress = { completed: [], lastVisited: null };
+
+function readProgress(): LearningProgress {
+  const raw = window.localStorage.getItem(progressKey);
+  if (!raw) return emptyProgress;
+  try {
+    const saved = JSON.parse(raw);
+    return {
+      completed: Array.isArray(saved?.completed) ? courses.filter(({ id }) => saved.completed.includes(id)).map(({ id }) => id) : [],
+      lastVisited: courses.find(({ id }) => id === saved?.lastVisited)?.id ?? null,
+    };
+  } catch {
+    return emptyProgress;
+  }
+}
 
 function courseUrl(id: string) {
   return `${guideUrl}&lesson=${id}`;
@@ -58,6 +76,48 @@ const basics = [
 export default function GuidePanel({ onNavigate, lesson }: { onNavigate: (view: InvestmentView) => void; lesson: string | null }) {
   const courseIndex = courses.findIndex(({ id }) => id === lesson);
   const course = courses[courseIndex];
+  const courseId = course?.id;
+  const [progress, setProgress] = useState(emptyProgress);
+  const [storageError, setStorageError] = useState(false);
+
+  useEffect(() => {
+    function syncProgress(event?: StorageEvent) {
+      if (event && event.key !== progressKey && event.key !== null) return;
+      try {
+        const saved = readProgress();
+        const next = !event && courseId && saved.lastVisited !== courseId
+          ? { ...saved, lastVisited: courseId }
+          : saved;
+        if (next !== saved) window.localStorage.setItem(progressKey, JSON.stringify(next));
+        setProgress(next);
+        setStorageError(false);
+      } catch {
+        setStorageError(true);
+      }
+    }
+    syncProgress();
+    window.addEventListener("storage", syncProgress);
+    return () => window.removeEventListener("storage", syncProgress);
+  }, [courseId]);
+
+  function toggleCompletion() {
+    if (!courseId) return;
+    try {
+      const saved = readProgress();
+      const completed = saved.completed.includes(courseId)
+        ? saved.completed.filter((id) => id !== courseId)
+        : [...saved.completed, courseId];
+      const next = { ...saved, completed };
+      window.localStorage.setItem(progressKey, JSON.stringify(next));
+      setProgress(next);
+      setStorageError(false);
+    } catch {
+      setStorageError(true);
+    }
+  }
+
+  const resume = courses.find(({ id }) => id === progress.lastVisited && !progress.completed.includes(id))
+    ?? courses.find(({ id }) => !progress.completed.includes(id));
   useEffect(() => {
     const anchor = window.location.hash.slice(1);
     if (anchor) document.getElementById(anchor)?.scrollIntoView();
@@ -101,7 +161,8 @@ export default function GuidePanel({ onNavigate, lesson }: { onNavigate: (view: 
         </aside>
 
         <div className="min-w-0 space-y-5">
-          {course ? <CourseContent index={courseIndex} /> : <>
+          {storageError && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">浏览器存储暂不可用，学习进度无法保存。</p>}
+          {course ? <CourseContent index={courseIndex} completed={progress.completed.includes(course.id)} onToggleCompletion={toggleCompletion} /> : <>
             <h3 id="project" className="scroll-mt-6 text-2xl font-semibold text-slate-950">项目</h3>
             <section id="practice" className="scroll-mt-6">
               <Card>
@@ -198,12 +259,20 @@ export default function GuidePanel({ onNavigate, lesson }: { onNavigate: (view: 
             </section>
 
             <Card>
-              <h4 className="text-xl font-semibold">课程目录</h4>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-xl font-semibold">课程目录</h4>
+                  <p className="mt-1 text-sm text-slate-600" role="status">已完成 {progress.completed.length} / {courses.length} 课</p>
+                </div>
+                {resume && <a className={secondaryButtonClass} href={courseUrl(resume.id)}>{progress.lastVisited ? "继续学习" : "开始学习"}</a>}
+              </div>
+              <p className="mt-2 text-xs leading-6 text-slate-500">进度保存在当前浏览器。重启项目后可继续，换浏览器或清理网站数据会影响记录。</p>
               <ol className="mt-4 grid gap-3 xl:grid-cols-2">
                 {courses.map(({ id, title }, index) => (
                   <li key={id}>
                     <a className="block rounded-xl border border-slate-200 p-4 text-sm font-semibold text-emerald-900 hover:border-emerald-400 hover:bg-emerald-50" href={courseUrl(id)}>
                       <span className="mr-2 text-xs font-normal text-slate-500">第 {index + 1} 课</span>{title}
+                      {progress.completed.includes(id) && <span className="ml-2 inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900">已完成</span>}
                     </a>
                   </li>
                 ))}
@@ -224,7 +293,7 @@ export default function GuidePanel({ onNavigate, lesson }: { onNavigate: (view: 
   );
 }
 
-function CourseContent({ index }: { index: number }) {
+function CourseContent({ index, completed, onToggleCompletion }: { index: number; completed: boolean; onToggleCompletion: () => void }) {
   const course = courses[index];
   const previous = courses[index - 1];
   const next = courses[index + 1];
@@ -275,6 +344,7 @@ function CourseContent({ index }: { index: number }) {
       </Card>
       <nav aria-label="课程顺序" className="flex flex-wrap justify-between gap-2">
         {previous && <a className={secondaryButtonClass} href={courseUrl(previous.id)}>上一课 · {previous.title}</a>}
+        <button type="button" className={secondaryButtonClass} onClick={onToggleCompletion}>{completed ? "撤销完成标记" : "标记本课完成"}</button>
         {next && <a className={`${secondaryButtonClass} ml-auto`} href={courseUrl(next.id)}>下一课 · {next.title}</a>}
       </nav>
     </>
