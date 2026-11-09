@@ -2,7 +2,7 @@ import { INVESTMENT_VIEWS, type InvestmentView } from "@/lib/invest-navigation";
 import { Card, secondaryButtonClass } from "./ui";
 
 const sections = [
-  ["start", "启动系统"], ["practice", "第一课"], ["first-run", "完整流程"],
+  ["practice", "第一课"], ["evidence", "读数据与写证据"], ["first-run", "完整流程"],
   ["basics", "炒股基础"], ["pages", "页面地图"], ["advanced", "进阶工具"],
   ["data", "数据与常见问题"],
 ] as const;
@@ -78,23 +78,12 @@ export default function GuidePanel({ onNavigate }: { onNavigate: (view: Investme
       <header className="rounded-[22px] border border-emerald-200 bg-emerald-50 p-5 sm:p-8">
         <p className="text-sm font-semibold text-emerald-800">Quant Copilot 使用手册</p>
         <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">新手指南</h2>
-        <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-700">第一次接触股票，可以先读基础术语，再走一遍从观察到复盘的流程。系统用于行情观察、记录、研究和模拟，任何一步都可以在没有实盘交易的情况下完成。</p>
+        <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-700">第一次接触股票，可以从三件事开始：读懂一根日K线、算清一笔假设亏损、记下一条观察。三项练习均无需实盘交易。遇到陌生术语时，可以随时跳到「炒股基础」。</p>
+        <a className={`${secondaryButtonClass} mt-4 inline-block`} href="#practice">开始第一课</a>
         <nav aria-label="指南目录" className="mt-5 flex flex-wrap gap-2">
           {sections.map(([id, label]) => <a className={secondaryButtonClass} href={`#${id}`} key={id}>{label}</a>)}
         </nav>
       </header>
-
-      <section id="start" className="scroll-mt-6">
-        <Card>
-          <h3 className="text-xl font-semibold">启动系统</h3>
-          <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-7 text-slate-700">
-            <li>在已安装启动器的 Mac 上按 <kbd className="rounded border bg-slate-50 px-1.5 py-0.5">⌘ 空格</kbd>，输入 <strong>Quant Copilot</strong>，按回车。</li>
-            <li>等待默认浏览器打开「A股驾驶舱」。已经启动时，也可以直接打开浏览器收藏的驾驶舱。</li>
-            <li>第一次练习可以保留原有账户数据，从观察一家公司和拖动模拟滑块开始。</li>
-          </ol>
-          <a className={`${secondaryButtonClass} mt-4 inline-block`} href="#practice">开始第一课</a>
-        </Card>
-      </section>
 
       <section id="practice" className="scroll-mt-6">
         <Card>
@@ -114,6 +103,27 @@ export default function GuidePanel({ onNavigate }: { onNavigate: (view: Investme
               </li>
             ))}
           </ol>
+        </Card>
+      </section>
+
+      <section id="evidence" className="scroll-mt-6">
+        <Card>
+          <h3 className="text-xl font-semibold">读数据与写证据</h3>
+          <dl className="mt-3 divide-y divide-slate-100 text-sm leading-7 text-slate-700">
+            <div className="py-3"><dt className="font-semibold">先看数据是什么时候的</dt><dd>报价时间代表供应商行情时点，获取时间代表系统何时读到它。休市时，即使获取时间刚更新，价格仍可能来自上一交易日。把两个时间与K线的截至日期分别看。</dd></div>
+            <div className="py-3"><dt className="font-semibold">把事实、筛选结果和假设分开</dt><dd>日K线和已实施分红属于可核对的数据。「板块启动」是本系统阈值算出的标签。你写的研究区间和估值情景是个人假设。若看到「不满足」，表示有数据但没达到阈值；「未知」表示无法判断。</dd></div>
+            <div className="py-3"><dt className="font-semibold">证据要能查回来</dt><dd>在个股研究里记录公告名称、日期、原文位置和支持判断的具体数字。写下哪些资料还没查到。看到新公告时先核对口径，再回到决策时间线对照当时的理由。</dd></div>
+          </dl>
+          <details className="mt-3 rounded-xl bg-emerald-50 p-4 text-sm leading-7 text-slate-700">
+            <summary className="cursor-pointer font-semibold text-emerald-900">看一个填写示例</summary>
+            <p className="mt-2">以下为假设练习。你在红利看板看到某家公司历史股息率较高，想核实这笔分红是否有一次性因素。</p>
+            <dl className="mt-2 space-y-1">
+              <div><dt className="inline font-semibold">观察理由 </dt><dd className="inline">核实高股息来自常规分红还是一次性分红。</dd></div>
+              <div><dt className="inline font-semibold">支持证据 </dt><dd className="inline">已看到历史派息记录，待核对分红实施公告和年报现金流。</dd></div>
+              <div><dt className="inline font-semibold">失效条件 </dt><dd className="inline">如果公告确认大部分派息属于一次性分红，就放弃用这次派息估计未来分红。</dd></div>
+              <div><dt className="inline font-semibold">下次复核 </dt><dd className="inline">读完公告后，记录哪些判断仍成立、哪些需要改。下次复盘用新证据和原记录对照。</dd></div>
+            </dl>
+          </details>
         </Card>
       </section>
 
@@ -160,7 +170,6 @@ export default function GuidePanel({ onNavigate }: { onNavigate: (view: Investme
         <Card>
           <h3 className="text-xl font-semibold">数据与常见问题</h3>
           <dl className="mt-3 space-y-4 text-sm leading-7 text-slate-600">
-            <div><dt className="font-semibold text-slate-900">Spotlight 找不到应用，或打开后浏览器没出现怎么办？</dt><dd>先在 Finder 的个人「应用程序」文件夹确认 Quant Copilot.app 是否存在。若启动器显示错误，按提示查看启动日志。如果浏览器能打开，但多处行情同时加载失败，可以访问 <a className="font-medium text-emerald-800 underline" href="http://localhost:8000/health" target="_blank" rel="noreferrer">本地后端状态</a>。后端有响应时，再查看行情卡的供应商状态和报价时间。</dd></div>
             <div><dt className="font-semibold text-slate-900">输入代码后为什么还不能加入？</dt><dd>先确认输入的是六位A股股票代码，并保留开头的0。等待识别完成再操作。若显示「打开已有记录」，直接打开原档案。若只有部分数据缺失，以页面标注为准。</dd></div>
             <div><dt className="font-semibold text-slate-900">情绪周期的「板块启动」怎么看？</dt><dd>系统同时检查板块涨幅、匹配到的涨停股数量和最早首次涨停时间。具体阈值在情绪周期的「设置与说明」中查看。三项都满足才标为启动。真实行情中，时间取该行业在涨停池中匹配到的股票的最早首次涨停时间。没有匹配或缺少时间时会显示「未知」。</dd></div>
             <div><dt className="font-semibold text-slate-900">为什么看到几个不同的日期？</dt><dd>公开行情有供应商时间和本机获取时间，休市时通常显示最近报价。日K线有自己的截至交易日，红利列表有扫描快照日期。查看公司详情时以各指标旁的来源、日期与口径为准。缺失值或延迟未知要保留为未知。</dd></div>
