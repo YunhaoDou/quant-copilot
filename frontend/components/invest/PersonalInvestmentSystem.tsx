@@ -22,6 +22,7 @@ export default function PersonalInvestmentSystem() {
   const [tab, setTab] = useState<InvestmentView>("dashboard");
   const [embedded, setEmbedded] = useState(false);
   const [guideLesson, setGuideLesson] = useState<string | null>(null);
+  const [guidePage, setGuidePage] = useState<string | null>(null);
   const { state, setState, ready, reset } = usePersonalInvestment();
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export default function PersonalInvestmentSystem() {
       setTab(readInvestmentView());
       setEmbedded(params.get("embed") === "1");
       setGuideLesson(params.get("lesson"));
+      setGuidePage(params.get("page") ?? (window.location.hash.slice(1) || null));
     };
     sync();
     window.addEventListener("popstate", sync);
@@ -95,7 +97,7 @@ export default function PersonalInvestmentSystem() {
 
         <div className="mt-5">
           {tab !== "cycle" && tab !== "market" && tab !== "guide" && <div className="mb-5"><LiveQuotes /></div>}
-          {tab === "guide" && <GuidePanel lesson={guideLesson} onNavigate={(view) => { selectTab(view); window.scrollTo(0, 0); }} />}
+          {tab === "guide" && <GuidePanel lesson={guideLesson} page={guidePage} onNavigate={(view) => { selectTab(view); window.scrollTo(0, 0); }} />}
           {tab === "dashboard" && <DashboardPanel state={state} setState={setState} />}
           {tab === "market" && <MarketRadarPanel state={state} setState={setState} />}
           {tab === "cycle" && <CyclePanel />}
