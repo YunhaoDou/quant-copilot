@@ -21,10 +21,16 @@ import LiveQuotes from "./live-quotes";
 export default function PersonalInvestmentSystem() {
   const [tab, setTab] = useState<InvestmentView>("dashboard");
   const [embedded, setEmbedded] = useState(false);
+  const [guideLesson, setGuideLesson] = useState<string | null>(null);
   const { state, setState, ready, reset } = usePersonalInvestment();
 
   useEffect(() => {
-    const sync = () => { setTab(readInvestmentView()); setEmbedded(new URLSearchParams(window.location.search).get("embed") === "1"); };
+    const sync = () => {
+      const params = new URLSearchParams(window.location.search);
+      setTab(readInvestmentView());
+      setEmbedded(params.get("embed") === "1");
+      setGuideLesson(params.get("lesson"));
+    };
     sync();
     window.addEventListener("popstate", sync);
     window.addEventListener(INVESTMENT_VIEW_EVENT, sync);
@@ -89,7 +95,7 @@ export default function PersonalInvestmentSystem() {
 
         <div className="mt-5">
           {tab !== "cycle" && tab !== "market" && tab !== "guide" && <div className="mb-5"><LiveQuotes /></div>}
-          {tab === "guide" && <GuidePanel onNavigate={(view) => { selectTab(view); window.scrollTo(0, 0); }} />}
+          {tab === "guide" && <GuidePanel lesson={guideLesson} onNavigate={(view) => { selectTab(view); window.scrollTo(0, 0); }} />}
           {tab === "dashboard" && <DashboardPanel state={state} setState={setState} />}
           {tab === "market" && <MarketRadarPanel state={state} setState={setState} />}
           {tab === "cycle" && <CyclePanel />}
