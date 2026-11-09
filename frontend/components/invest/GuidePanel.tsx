@@ -13,22 +13,41 @@ const courseParts = [
   { id: "concepts", title: "概念讲解" },
   { id: "example", title: "算例" },
   { id: "quiz", title: "课后自测" },
-  { id: "reference", title: "知识点速查" },
 ];
 const defaultPart = courseParts[0].id;
 
-type LearningProgress = { completed: string[]; lastVisited: string | null; lastPart?: string };
-const emptyProgress: LearningProgress = { completed: [], lastVisited: null };
+type CourseAnswer = { text: string; submitted: boolean };
+type LearningProgress = {
+  completed: string[];
+  lastVisited: string | null;
+  lastPart?: string;
+  answers: Record<string, CourseAnswer>;
+};
+const emptyProgress: LearningProgress = { completed: [], lastVisited: null, answers: {} };
+const emptyAnswer: CourseAnswer = { text: "", submitted: false };
+
+function normalizePart(part: unknown) {
+  if (part === "reference") return "concepts";
+  return courseParts.find(({ id }) => id === part)?.id;
+}
 
 function readProgress(): LearningProgress {
   const raw = window.localStorage.getItem(progressKey);
   if (!raw) return emptyProgress;
   try {
     const saved = JSON.parse(raw);
+    const answers: LearningProgress["answers"] = {};
+    for (const { id } of courses) {
+      const answer = saved?.answers?.[id];
+      if (typeof answer?.text === "string") {
+        answers[id] = { text: answer.text, submitted: answer.submitted === true && Boolean(answer.text.trim()) };
+      }
+    }
     return {
+      answers,
       completed: Array.isArray(saved?.completed) ? courses.filter(({ id }) => saved.completed.includes(id)).map(({ id }) => id) : [],
       lastVisited: courses.find(({ id }) => id === saved?.lastVisited)?.id ?? null,
-      lastPart: courseParts.find(({ id }) => id === saved?.lastPart)?.id,
+      lastPart: normalizePart(saved?.lastPart),
     };
   } catch {
     return emptyProgress;
@@ -90,7 +109,7 @@ export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (
   const courseIndex = courses.findIndex(({ id }) => id === lesson);
   const course = courses[courseIndex];
   const courseId = course?.id;
-  const part = courseParts.find(({ id }) => id === page)?.id ?? defaultPart;
+  const part = normalizePart(page) ?? defaultPart;
   const group = directory.find(({ id, entries }) => id === page || entries.some((entry) => entry.id === page)) ?? directory[0];
   const activePage = group.entries.find(({ id }) => id === page)?.id ?? group.id;
   const [progress, setProgress] = useState(emptyProgress);
@@ -116,10 +135,26 @@ export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (
     return () => window.removeEventListener("storage", syncProgress);
   }, [courseId, part]);
 
+  function saveAnswer(answer: CourseAnswer) {
+    if (!courseId) return;
+    const local = { ...progress, answers: { ...progress.answers, [courseId]: answer } };
+    setProgress(local);
+    try {
+      const saved = readProgress();
+      const next = { ...saved, answers: { ...saved.answers, [courseId]: answer } };
+      window.localStorage.setItem(progressKey, JSON.stringify(next));
+      setProgress(next);
+      setStorageError(false);
+    } catch {
+      setStorageError(true);
+    }
+  }
+
   function toggleCompletion() {
     if (!courseId) return;
     try {
       const saved = readProgress();
+      if (!saved.completed.includes(courseId) && !saved.answers[courseId]?.submitted) return;
       const completed = saved.completed.includes(courseId)
         ? saved.completed.filter((id) => id !== courseId)
         : [...saved.completed, courseId];
@@ -176,7 +211,7 @@ export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (
 
         <div className="min-w-0 space-y-5 px-1 py-2 md:px-3">
           {storageError && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">浏览器存储暂不可用，学习进度无法保存。</p>}
-          {course ? <CourseContent index={courseIndex} part={part} completed={progress.completed.includes(course.id)} onToggleCompletion={toggleCompletion} /> : <>
+          {course ? <CourseContent index={courseIndex} part={part} completed={progress.completed.includes(course.id)} onToggleCompletion={toggleCompletion} answer={progress.answers[course.id] ?? emptyAnswer} onSaveAnswer={saveAnswer} /> : <>
             {activePage === "project" && <section>
               <h3 className="text-xl font-semibold">项目</h3>
               <p className="mt-2 text-sm leading-7 text-slate-700">按功能查操作，也可以从第一课做一遍零资金练习。</p>
@@ -265,7 +300,7 @@ export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (
 
             {activePage === "knowledge" && <section>
               <h3 className="text-xl font-semibold">知识 · 课程目录</h3>
-              <p className="mt-2 text-sm leading-7 text-slate-700">从市场基础学到回测验证。每课都有独立的概念讲解、算例、自测和速查分页。</p>
+              <p className="mt-2 text-sm leading-7 text-slate-700">从市场基础学到回测验证。每课先读概念和算例，再到自测页写出自己的答案。</p>
               <p className="mt-2 text-xs leading-6 text-slate-500">进度保存在当前浏览器，重启项目后可继续。</p>
               <ol className="mt-4 divide-y divide-slate-200">
                 {courses.map(({ id, title }, index) => (
@@ -291,7 +326,14 @@ export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (
   );
 }
 
-function CourseContent({ index, part, completed, onToggleCompletion }: { index: number; part: string; completed: boolean; onToggleCompletion: () => void }) {
+function CourseContent({ index, part, completed, onToggleCompletion, answer, onSaveAnswer }: {
+  index: number;
+  part: string;
+  completed: boolean;
+  onToggleCompletion: () => void;
+  answer: CourseAnswer;
+  onSaveAnswer: (answer: CourseAnswer) => void;
+}) {
   const course = courses[index];
   const previous = courses[index - 1];
   const next = courses[index + 1];
@@ -306,44 +348,62 @@ function CourseContent({ index, part, completed, onToggleCompletion }: { index: 
         <nav aria-label="本课分页" className="mt-4 flex flex-wrap gap-2">
           {courseParts.map(({ id, title }) => <a key={id} className={`${secondaryButtonClass} aria-[current=page]:border-emerald-400 aria-[current=page]:bg-emerald-50`} aria-current={part === id ? "page" : undefined} href={courseUrl(course.id, id)}>{title}</a>)}
         </nav>
-        {part === "concepts" && <div className="mt-3 divide-y divide-slate-100">
-          {course.sections.map(([title, text]) => (
-            <section className="py-4" key={title}>
-              <h4 className="font-semibold text-slate-950">{title}</h4>
-              <p className="mt-2 text-sm leading-7 text-slate-700">{text}</p>
-            </section>
-          ))}
-        </div>}
+        {part === "concepts" && <>
+          <div className="mt-3 divide-y divide-slate-100">
+            {course.sections.map(([title, text]) => (
+              <section className="py-4" key={title}>
+                <h4 className="font-semibold text-slate-950">{title}</h4>
+                <p className="mt-2 text-sm leading-7 text-slate-700">{text}</p>
+              </section>
+            ))}
+          </div>
+          <section className="border-t border-slate-200 pt-4">
+            <h4 className="font-semibold text-slate-950">概念拆解</h4>
+            <dl className="mt-2 divide-y divide-slate-100">
+              {topics.map(([day, title, explanation]) => (
+                <div id={`D${String(day).padStart(3, "0")}`} key={day} className="py-3 text-sm">
+                  <dt className="font-semibold">{title}</dt>
+                  <dd className="mt-1 leading-7 text-slate-700">{explanation}</dd>
+                </div>
+              ))}
+            </dl>
+            <a className={`${secondaryButtonClass} mt-4 inline-flex`} href={courseUrl(course.id, "example")}>去看算例</a>
+          </section>
+        </>}
         {part === "example" && <section className="mt-5 border-t border-slate-200 pt-4">
           <h4 className="font-semibold text-emerald-900">跟着算例走一遍</h4>
           <p className="mt-2 text-sm leading-7 text-slate-700">{course.example}</p>
+          <a className={`${secondaryButtonClass} mt-4 inline-flex`} href={courseUrl(course.id, "quiz")}>去写自测答案</a>
         </section>}
       </section>
       {part === "quiz" && <section>
         <h4 className="text-lg font-semibold">课后自测</h4>
         <p className="mt-2 text-sm leading-7 text-slate-700">{course.question}</p>
-        <details className="mt-3 text-sm">
-          <summary className="cursor-pointer font-semibold text-emerald-900">查看答案与解析</summary>
-          <p className="mt-2 leading-7 text-slate-700">{course.answer}</p>
-        </details>
-      </section>}
-      {part === "reference" && <section>
-          <h4 className="text-lg font-semibold">本课知识点速查</h4>
-          <ol start={first} className="mt-3 divide-y divide-slate-100">
-            {topics.map(([day, title, explanation]) => {
-              const code = `D${String(day).padStart(3, "0")}`;
-              return (
-                <li id={code} key={day} className="py-3">
-                  <h5 className="text-sm font-semibold"><span className="mr-2 font-mono text-emerald-800">{code}</span>{title}</h5>
-                  <p className="mt-1 text-sm leading-7 text-slate-700">{explanation}</p>
-                </li>
-              );
-            })}
-          </ol>
+        <form className="mt-4" onSubmit={(event) => {
+          event.preventDefault();
+          if (answer.text.trim()) onSaveAnswer({ ...answer, submitted: true });
+        }}>
+          <label className="block text-sm font-semibold text-slate-900" htmlFor="course-answer">我的答案</label>
+          <textarea id="course-answer" rows={5} maxLength={4000} value={answer.text}
+            onChange={(event) => {
+              const text = event.target.value;
+              onSaveAnswer({ text, submitted: answer.submitted && Boolean(text.trim()) });
+            }}
+            placeholder="用自己的话写结论，并说明推理或计算过程。"
+            className="mt-2 block w-full resize-y rounded-lg border border-slate-300 bg-white p-3 text-sm leading-6 text-slate-900 focus-visible:outline-emerald-700" />
+          <p className="mt-2 text-xs text-slate-500">作答会保存在当前浏览器。提交后可以对照解析，继续修改自己的答案。</p>
+          {!answer.submitted && <button type="submit" className={`${secondaryButtonClass} mt-3 disabled:opacity-50`} disabled={!answer.text.trim()}>提交答案并看解析</button>}
+        </form>
+        {answer.submitted && <div className="mt-5 border-t border-slate-200 pt-4">
+          <h5 className="font-semibold text-emerald-900">参考答案与解析</h5>
+          <p className="mt-2 text-sm leading-7 text-slate-700">{course.answer}</p>
+        </div>}
       </section>}
       <nav aria-label="课程顺序" className="flex flex-wrap justify-between gap-2">
         {previous && <a className={secondaryButtonClass} href={courseUrl(previous.id)}>上一课 · {previous.title}</a>}
-        <button type="button" className={secondaryButtonClass} onClick={onToggleCompletion}>{completed ? "撤销完成标记" : "标记本课完成"}</button>
+        {completed || answer.submitted
+          ? <button type="button" className={secondaryButtonClass} onClick={onToggleCompletion}>{completed ? "撤销完成标记" : "标记本课完成"}</button>
+          : part !== "quiz" && <a className={secondaryButtonClass} href={courseUrl(course.id, "quiz")}>前往自测</a>}
         {next && <a className={`${secondaryButtonClass} ml-auto`} href={courseUrl(next.id)}>下一课 · {next.title}</a>}
       </nav>
     </>
