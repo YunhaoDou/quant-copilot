@@ -57,3 +57,25 @@ def test_limit_up_does_not_fill_and_risk_cancels_buy():
     step(a, [updated])
     assert not a["trades"] and a["pending"] is None
     assert price_limit({"code": "300001", "name": "测试", "previous_close": 10}) == (8, 12)
+
+
+def test_review_uses_only_prior_window_and_keeps_live_account_unchanged(tmp_path, monkeypatch):
+    import pandas as pd
+    from datetime import datetime, timedelta
+    from app.cycle import events, market, strategy_sim
+    from app.cycle.live import TZ
+    today = datetime.now(TZ).date()
+    dates = pd.bdate_range(end=today-timedelta(days=1), periods=20)
+    rows = [{"trade_date": d.date().isoformat(), "low": 90, "close": 95} for d in dates]
+    rows.extend([
+        {"trade_date": today.isoformat(), "low": 100, "close": 105},
+        {"trade_date": (today+timedelta(days=1)).isoformat(), "low": 1, "close": 2},
+    ])
+    monkeypatch.setattr(events, "DB_PATH", tmp_path / "review.sqlite")
+    monkeypatch.setattr(market, "fetch_daily", lambda *args: pd.DataFrame(rows))
+    result = strategy_sim.review_today()
+    assert result["action"] == "不交易"
+    assert result["previous_low"] == 90 and result["today_low"] == 100
+    with events.database() as db:
+        assert strategy_sim.read(db) is None
+        assert db.execute("SELECT COUNT(*) FROM strategy_reviews").fetchone()[0] == 1

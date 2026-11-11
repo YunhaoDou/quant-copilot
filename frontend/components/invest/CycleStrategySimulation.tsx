@@ -17,12 +17,14 @@ export default function CycleStrategySimulation() {
   const [account, setAccount] = useState<Account | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [reviews, setReviews] = useState<{ trade_date: string; reviewed_at: string; mode: string; action: string; reason: string; source: string; window: number; previous_low: number; previous_low_date: string; today_low: number; today_close: number; previous_close_low: number }[]>([]);
   async function load(action = "", signal?: AbortSignal) {
     try {
       const response = await fetch(`${marketApiUrl()}/cycle/strategy-sim${action}`, { method: action ? "POST" : "GET", cache: "no-store", signal });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "读取模拟账户失败");
       setAccount(data.account); setError("");
+      if (Array.isArray(data.reviews)) setReviews(data.reviews);
     } catch (e) { if (!signal?.aborted) setError(String(e)); }
   }
   useEffect(() => {
@@ -42,6 +44,15 @@ export default function CycleStrategySimulation() {
         <button disabled={busy || account?.status !== "running"} className={secondaryButtonClass} onClick={() => control("/pause")}>暂停模拟</button>
         <button disabled={busy || (!account?.position && !account?.pending)} className={secondaryButtonClass} onClick={() => control("/exit")}>请求模拟退出</button>
         <button className={secondaryButtonClass} onClick={() => load()}>刷新模拟账户</button>
+        <button disabled={busy} className={secondaryButtonClass} onClick={async () => {
+          setBusy(true);
+          try {
+            const response = await fetch(`${marketApiUrl()}/cycle/strategy-sim/review-today`, { method: "POST" });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || "核验失败");
+            await load();
+          } catch (e) { setError(String(e)); } finally { setBusy(false); }
+        }}>核验今日机会</button>
       </div>
     </div>{error && <p role="alert" className="mt-3 text-red-700">{error}</p>}</Card>
     <Card><h4 className="font-semibold">本轮规则与假设</h4><ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700">
@@ -51,6 +62,13 @@ export default function CycleStrategySimulation() {
       <li>默认本金10万元、单仓10%、价格止损8%、止盈15%、组合回撤防线20%。费用与滑点读取项目配置。首版同时持有一只股票，每事件每阶段最多进入一次。</li>
       <li>冰点逆势连板、电风扇轮动及盘中洗盘意图仍需证据化定义。当前自动模拟聚焦启动、人工确认的回补及风险退出。</li>
     </ul></Card>
+    {reviews.map(review => <Card key={review.trade_date}>
+      <h4 className="font-semibold">{review.trade_date} · {review.mode} · {review.action}</h4>
+      <p className="mt-2 text-sm leading-7">{review.reason}</p>
+      <p className="mt-2 text-sm leading-7">今日最低 {review.today_low.toFixed(2)} · 前{review.window}交易日最低 {review.previous_low.toFixed(2)}（{review.previous_low_date}）</p>
+      <p className="text-sm leading-7">今日收盘参考 {review.today_close.toFixed(2)} · 前置窗口最低收盘 {review.previous_close_low.toFixed(2)}</p>
+      <p className="mt-2 text-xs text-slate-500">{review.source} · 核验 {stamp(review.reviewed_at)} · 此记录为独立核验结果</p>
+    </Card>)}
     {account && <>
       <Card><h4 className="font-semibold">模拟账户 · {account.status === "running" ? "运行中" : "已暂停"}</h4>
         <div className="mt-4 grid gap-4 sm:grid-cols-4">{[

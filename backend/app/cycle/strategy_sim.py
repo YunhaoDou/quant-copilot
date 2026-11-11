@@ -14,6 +14,8 @@ router = APIRouter(prefix="/cycle/strategy-sim", tags=["策略模拟"])
 def schema(db):
     db.execute("""CREATE TABLE IF NOT EXISTS strategy_sim (
         id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL)""")
+    db.execute("""CREATE TABLE IF NOT EXISTS strategy_reviews (
+        trade_date TEXT PRIMARY KEY, payload TEXT NOT NULL)""")
 
 
 def read(db):
@@ -194,7 +196,51 @@ def run_simulation():
 @router.get("")
 def get_account():
     with database() as db:
-        return {"account": read(db)}
+        account = read(db)
+        reviews = [json.loads(row[0]) for row in db.execute("SELECT payload FROM strategy_reviews ORDER BY trade_date DESC LIMIT 20")]
+        return {"account": account, "reviews": reviews}
+
+
+@router.post("/review-today")
+def review_today():
+    from app.cycle.engine import load_config
+    from app.cycle.market import fetch_daily
+    import httpx
+    now = datetime.now(TZ)
+    today = now.date().isoformat()
+    config = load_config()
+    window = config["market_new_low_lookback_days"]
+    try:
+        daily = fetch_daily("sh000001", max(60, window + 10))
+    except (httpx.HTTPError, ValueError, KeyError) as exc:
+        raise HTTPException(503, "指数日线暂不可用，请稍后重试") from exc
+    previous = daily[daily.trade_date < today].tail(window)
+    current = daily[daily.trade_date == today]
+    if len(previous) < window or current.empty:
+        raise HTTPException(422, "当前日期缺少完整的指数日线或前置窗口，暂不生成判断")
+    row = current.iloc[-1]
+    prior_low, today_low = float(previous.low.min()), float(row.low)
+    events = [event for event in list_events() if event["start_date"] == today]
+    prior_close, today_close = float(previous.close.min()), float(row.close)
+    qualifies = today_low < prior_low or today_close < prior_close
+    report = {
+        "trade_date": today, "reviewed_at": now.isoformat(), "source": "腾讯上证指数日线",
+        "window": window, "previous_low": prior_low,
+        "previous_low_date": previous.loc[previous.low.idxmin(), "trade_date"],
+        "today_low": today_low, "market_new_low": qualifies,
+        "previous_close_low": prior_close, "today_close": today_close,
+        "action": "待进一步核验" if qualifies else "不交易",
+        "reason": "指数新低前提满足，仍需核验当时分时止跌、回补和后续可成交报价" if qualifies else
+            "当日最低价与最新收盘参考值均未低于各自的前置观察窗最低值，未满足本版策略的大盘新低门槛",
+        "events": [{"name": event["name"], "first_at": event["first_at"],
+                    "initial_pct": event["first"]["sector"].get("pct"),
+                    "initial_limit_up": event["first"]["sector"].get("limit_up")} for event in events],
+        "mode": "盘后核验" if now.strftime("%H:%M") >= "15:00" else "盘中截至当前核验",
+    }
+    with database() as db:
+        schema(db)
+        db.execute("INSERT OR REPLACE INTO strategy_reviews VALUES(?,?)", (today, encode(report)))
+    return report
 
 
 @router.post("/start")
