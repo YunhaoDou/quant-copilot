@@ -58,12 +58,16 @@ def price_limit(quote):
     return round_price(previous * (1-pct)), round_price(previous * (1+pct))
 
 
-def step(account, events):
+def step(account, events, policy="cycle"):
     """同一行情时点仅处理一次，模拟订单最早在下一可得报价执行。"""
     if account["status"] != "running":
         return account
     rules = account["rules"]
-    for event in sorted(events, key=lambda e: e["latest"]["quote_time"]):
+    if policy == "research":
+        order = lambda e: (e["latest"].get("observed_at", e["latest"]["quote_time"]), e.get("priority", 0), e["id"])
+    else:
+        order = lambda e: e["latest"]["quote_time"]
+    for event in sorted(events, key=order):
         if event["status"] != "active":
             continue
         latest, first = event["latest"], event["first"]
@@ -95,6 +99,9 @@ def step(account, events):
                     log(account, stamp, "取消模拟买单：触发条件消失或风险升高", event["id"])
                 else:
                     fill = price * (1 + rules["slippage_bps"]/10000 * (1 if buy else -1))
+                    if fill > limits[1] or fill < limits[0]:
+                        log(account, stamp, "订单等待：计入滑点后的模拟价格超出涨跌停范围", event["id"])
+                        continue
                     if buy:
                         budget = min(account["cash"], account["equity"] * rules["position_pct"]/100)
                         unit = fill * (1+rules["buy_cost_bps"]/10000)
@@ -145,7 +152,9 @@ def step(account, events):
                 reason = "模拟止盈"
             elif latest["market"].get("risk") == "高" or event["stage"] == "退潮回避":
                 reason = "市场风险或人工退潮确认"
-            elif len(event["dates"]) in rules["sim_exit_days"] or len(event["dates"]) > max(rules["sim_exit_days"]):
+            elif policy == "research" and latest.get("exit_failed", latest["sector"].get("started") is False) is True:
+                reason = "策略条件失效"
+            elif policy == "cycle" and (len(event["dates"]) in rules["sim_exit_days"] or len(event["dates"]) > max(rules["sim_exit_days"])):
                 reason = "第3或第5个已采集交易日期的减险退出假设"
             if reason:
                 account["pending"] = dict(side="sell", symbol=position["symbol"], event_id=event["id"],
@@ -157,12 +166,13 @@ def step(account, events):
                 log(account, stamp, "停止新增模拟仓位：组合回撤触线", event["id"])
                 continue
             day = len(event["dates"])
-            rebound = day == rules["sim_reentry_day"] and event["stage"] == "回补确认"
-            leg = event["id"] + (":rebound" if rebound else ":start")
-            market_confirmed = first["market"].get("new_low") is True and event["stage"] in ("启动观察", "延续观察", "回补确认")
+            rebound = policy == "cycle" and day == rules["sim_reentry_day"] and event["stage"] == "回补确认"
+            leg = event.get("entry_key") or event["id"] + (":rebound" if rebound else ":start")
+            market_confirmed = policy == "research" or (
+                first["market"].get("new_low") is True and event["stage"] in ("启动观察", "延续观察", "回补确认"))
             if not market_confirmed:
                 log(account, stamp, "等待：首次大盘新低数据及人工止跌/回补证据确认。当前数据不足，暂不模拟买入", event["id"])
-            elif not 1 <= day <= rules["sim_start_max_days"] and not rebound:
+            elif policy == "cycle" and not 1 <= day <= rules["sim_start_max_days"] and not rebound:
                 log(account, stamp, "等待：当前不在启动或已确认回补窗口", event["id"])
             elif leg in account["completed_legs"]:
                 log(account, stamp, "已执行本事件该阶段，等待后续阶段", event["id"])
@@ -175,7 +185,7 @@ def step(account, events):
                 known_quote = quotes.get(symbol) or {}
                 signal_time = max(stamp, latest.get("observed_at", stamp), known_quote.get("quote_time", stamp))
                 account["pending"] = dict(side="buy", symbol=symbol, event_id=event["id"], signal_time=signal_time,
-                                          reason="回补确认" if rebound else "启动确认", leg=leg)
+                                          reason=event.get("signal_reason") or ("回补确认" if rebound else "启动确认"), leg=leg)
                 log(account, stamp, "生成模拟买单，等待下一可得报价；连板涨停可能无法成交", event["id"])
         account["curve"].append({"time": stamp, "equity": account["equity"]})
         account["curve"] = account["curve"][-500:]

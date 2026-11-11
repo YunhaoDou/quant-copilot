@@ -19,11 +19,13 @@ import WatchlistPanel from "./WatchlistPanel";
 import { fetchCompanyInfo } from "@/lib/company-data";
 import { upsertCompany } from "@/lib/company-store";
 import LiveQuotes from "./live-quotes";
+import StrategyCenterPanel from "./StrategyCenterPanel";
 
 export default function PersonalInvestmentSystem() {
   const [tab, setTab] = useState<InvestmentView>("dashboard");
   const [embedded, setEmbedded] = useState(false);
   const [guideLesson, setGuideLesson] = useState<string | null>(null);
+  const [strategyId, setStrategyId] = useState<string | null>(null);
   const [guidePage, setGuidePage] = useState<string | null>(null);
   const { state, setState, ready, reset } = usePersonalInvestment();
 
@@ -33,6 +35,7 @@ export default function PersonalInvestmentSystem() {
       setTab(readInvestmentView());
       setEmbedded(params.get("embed") === "1");
       setGuideLesson(params.get("lesson"));
+      setStrategyId(params.get("strategy"));
       setGuidePage(params.get("page") ?? (window.location.hash.slice(1) || null));
     };
     sync();
@@ -112,6 +115,7 @@ export default function PersonalInvestmentSystem() {
           {tab === "research" && <ResearchPanel state={state} setState={setState} />}
           {tab === "tools" && <ToolsPanel profile={state.profile} />}
           {tab === "journal" && <JournalPanel state={state} setState={setState} />}
+          {tab === "strategies" && <StrategyCenterPanel strategyId={strategyId} />}
           {tab === "functions" && <FunctionCenterPanel />}
         </div>
 

@@ -56,4 +56,9 @@ async def run_monitor():
                 monitor_status.update(state="采集失败", error="公开行情请求失败，稍后自动重试")
         else:
             monitor_status.update(state="采集窗口外")
+        try:
+            from app.cycle.strategy_center import run_accounts
+            await asyncio.to_thread(run_accounts)
+        except Exception:
+            logger.exception("研究策略账户本轮更新失败")
         await asyncio.sleep(config["event_poll_seconds"])

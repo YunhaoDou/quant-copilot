@@ -1,4 +1,4 @@
-export type InvestmentView = "dashboard" | "market" | "cycle" | "dividends" | "watchlist" | "research" | "tools" | "journal" | "functions" | "guide";
+export type InvestmentView = "dashboard" | "market" | "cycle" | "dividends" | "watchlist" | "research" | "tools" | "journal" | "functions" | "guide" | "strategies";
 
 export const INVESTMENT_VIEWS: { id: InvestmentView; label: string; shortLabel: string; description: string; group: "决策" | "工具" }[] = [
   { id: "guide", label: "新手指南", shortLabel: "指南", description: "炒股基础与系统操作", group: "决策" },
@@ -8,6 +8,7 @@ export const INVESTMENT_VIEWS: { id: InvestmentView; label: string; shortLabel: 
   { id: "dividends", label: "红利看板", shortLabel: "红利", description: "真实分红、分类与价格位置", group: "决策" },
   { id: "watchlist", label: "A股观察池", shortLabel: "观察池", description: "公司跟踪、研究区间与待办", group: "决策" },
   { id: "research", label: "个股研究", shortLabel: "研究", description: "论证与失效条件", group: "决策" },
+  { id: "strategies", label: "策略研究", shortLabel: "策略", description: "六类方法与独立模拟", group: "工具" },
   { id: "tools", label: "模拟工具", shortLabel: "模拟", description: "仓位冲击与估值", group: "工具" },
   { id: "journal", label: "决策复盘", shortLabel: "复盘", description: "证据、退出与教训", group: "工具" },
   { id: "functions", label: "功能中心", shortLabel: "功能", description: "行情、选股与回测", group: "工具" },
@@ -33,6 +34,7 @@ export function navigateInvestmentView(view: InvestmentView, company?: string) {
   url.searchParams.set("view", view);
   url.searchParams.delete("lesson");
   url.searchParams.delete("page");
+  url.searchParams.delete("strategy");
   url.searchParams.delete("cycleTab");
   url.searchParams.delete("cycleEvent");
   if (company) url.searchParams.set("company", company); else url.searchParams.delete("company");
