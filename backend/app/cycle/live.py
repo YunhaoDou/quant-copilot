@@ -259,10 +259,32 @@ class LiveDataProvider:
                         warnings.append(name+"分时不可用")
             all_amounts = [q["amount"] for q in quotes if q["symbol"] in ("sh000001", "sz399001") and q["timestamp"][:10] == date]
             snapshot = dict(date=date, available_at=datetime.now(TZ).isoformat(), state=state, market_close=quote["price"], market_low=quote["low"], market_pct=quote["pct"], market_amount=sum(all_amounts)/10000 if len(all_amounts) == 2 and all(n is not None for n in all_amounts) else None,
-                new_low=None, limit_up=up_count, limit_down=down_count, height=max((r["boards"] for r in leaders), default=0) if up is not None else None, break_rate=break_rate, seal_rate=len(up)/attempts if attempts else 0 if attempts == 0 else None, yesterday_pct=mean, risk="高" if high_risk else "待核实" if state == "数据不足" else "关注", sectors=sectors[:18], leaders=leaders[:12],
+                new_low=None, limit_up=up_count, limit_down=down_count, height=max((r["boards"] for r in leaders), default=0) if up is not None else None, break_rate=break_rate, seal_rate=len(up)/attempts if attempts else 0 if attempts == 0 else None, yesterday_pct=mean, risk="高" if high_risk else "待核实" if state == "数据不足" else "关注", sectors=sectors[:18], leaders=leaders[:12], broken_leaders=leader_rows(broken or []),
                 card=dict(pattern={"启动":"启动龙头", "退潮":"退潮回避", "冰点":"冰点龙头", "分歧":"冲高回落风险"}.get(state,"持续观察"), state=state, action="回避" if high_risk else "观察", checks={"板块启动": any(s["started"] for s in sectors) if sectors else None, "跌停数低于风险阈值": not high_risk if down_count is not None else None, "昨日涨停表现为正": mean > 0 if mean is not None else None}, invalidation="跌停扩散、板块启动条件消失或数据过期时重新核实。", risk="盘中候选，不代表收盘确认；股票池无秒级供应商时间戳。"), rule_version=self.config["rule_version"])
             fetched = datetime.now(TZ)
             metadata = dict(provider="腾讯公开行情 / 东方财富公开行情", fetched_at=fetched.isoformat(), quote_time=quote["timestamp"], refresh_seconds=self.config["live_refresh_seconds"], feeds=feeds, warnings=warnings + ["股票池仅有数据日期，秒级延迟未知；行业名称精确匹配，分类不一致可能低估板块涨停家数。", "仅展示已采集的真实历史；未接入历史成分和完整日线，真实行情回测暂不可用。"], indices=quotes)
+            from app.cycle.events import ingest, tracked_symbols
+            try:
+                from app.cycle.market import fetch_quotes
+                started_names = {s["name"] for s in sectors if s["started"]}
+                symbols = sorted(set(tracked_symbols()) | {row["symbol"] for row in leaders if row["sector"] in started_names})
+                candidate_quotes = []
+                for offset in range(0, len(symbols), 100):
+                    try:
+                        candidate_quotes.extend(fetch_quotes(symbols[offset:offset + 100])["quotes"])
+                    except Exception:
+                        metadata["warnings"].append("部分事件候选报价不可用，缺失项保留未知")
+                cutoff = datetime.now(TZ)
+                snapshot["candidate_quotes"] = [
+                    row for row in candidate_quotes if row["quote_time"][:10] == date
+                    and 0 <= (cutoff - datetime.fromisoformat(row["quote_time"])).total_seconds() <= self.config["live_stale_seconds"]
+                ]
+                metadata["fetched_at"] = cutoff.isoformat()
+                ingest(snapshot, metadata, sectors, leaders, max_age=self.config["live_stale_seconds"])
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception("板块事件保存失败")
+                metadata["event_error"] = True
             store_snapshot(snapshot, fetched.isoformat(), details={"metadata":metadata, "intraday":minutes})
             return dict(source="akshare", simulated=False, config=self.config, dates=captured_dates(), current=snapshot, history=read_history(self.config["live_history_limit"]), intraday=minutes, metadata=metadata,
                 backtest=dict(events=[], summary=dict(samples=0,signals=0,win_rate=None,mean=None,median=None), simulation=dict(trades=[],curve=[],max_drawdown=None,final_equity=None)))

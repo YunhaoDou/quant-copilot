@@ -16,6 +16,8 @@ import ResearchPanel from "./ResearchPanel";
 import ToolsPanel from "./ToolsPanel";
 import { usePersonalInvestment } from "./usePersonalInvestment";
 import WatchlistPanel from "./WatchlistPanel";
+import { fetchCompanyInfo } from "@/lib/company-data";
+import { upsertCompany } from "@/lib/company-store";
 import LiveQuotes from "./live-quotes";
 
 export default function PersonalInvestmentSystem() {
@@ -100,7 +102,11 @@ export default function PersonalInvestmentSystem() {
           {tab === "guide" && <GuidePanel lesson={guideLesson} page={guidePage} onNavigate={(view) => { selectTab(view); window.scrollTo(0, 0); }} />}
           {tab === "dashboard" && <DashboardPanel state={state} setState={setState} />}
           {tab === "market" && <MarketRadarPanel state={state} setState={setState} />}
-          {tab === "cycle" && <CyclePanel />}
+          {tab === "cycle" && <CyclePanel onResearch={async (code) => {
+            const info = await fetchCompanyInfo(code);
+            setState(current => upsertCompany(upsertCompany(current, info, "watch", "情绪周期"), info, "research"));
+            navigateInvestmentView("research", code);
+          }} />}
           {tab === "dividends" && <DividendPanel state={state} setState={setState} />}
           {tab === "watchlist" && <WatchlistPanel state={state} setState={setState} />}
           {tab === "research" && <ResearchPanel state={state} setState={setState} />}

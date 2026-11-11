@@ -1,5 +1,6 @@
 """FastAPI entry point."""
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,6 +35,8 @@ from app.cycle.dividends import router as dividend_router
 from app.routes.research_lab import router as research_lab_router
 from app.cycle.radar import router as radar_router
 from app.cycle.companies import router as companies_router
+from app.cycle.events import router as events_router
+from app.cycle.event_monitor import run_monitor
 
 # A-share starter universe. Yahoo Finance uses .SS/.SZ suffixes for mainland listings.
 A_SHARE_UNIVERSE = {
@@ -75,7 +78,13 @@ async def lifespan(app: FastAPI):
     await _seed_tickers()
     async with AsyncSessionLocal() as session:
         await app_settings_service.load_settings_from_db(session)
-    yield
+    event_task = asyncio.create_task(run_monitor())
+    try:
+        yield
+    finally:
+        event_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await event_task
 
 
 app = FastAPI(
@@ -94,6 +103,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(events_router)
 app.include_router(cycle_router)
 app.include_router(market_router)
 app.include_router(dividend_router)

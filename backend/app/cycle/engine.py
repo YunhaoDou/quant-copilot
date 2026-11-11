@@ -11,6 +11,8 @@ CONFIG_PATH = Path(__file__).with_name("config.yaml")
 def load_config():
     # JSON 是 YAML 1.2 子集，避免为现有项目增加解析依赖。
     config = json.loads(CONFIG_PATH.read_text())
+    if not isinstance(config["event_poll_seconds"], int) or not 10 <= config["event_poll_seconds"] <= 3600:
+        raise ValueError("事件采集间隔需为10至3600秒")
     positive = ["market_new_low_lookback_days", "intraday_stop_fall_bars", "intraday_bar_minutes", "sector_start_limit_up_count", "mock_days", "lot_size", "initial_capital"]
     if any(not isinstance(config[k], int) or config[k] <= 0 for k in positive):
         raise ValueError("窗口、样本数、手数与本金必须为正整数")

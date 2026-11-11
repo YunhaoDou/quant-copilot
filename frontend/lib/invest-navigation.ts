@@ -33,6 +33,8 @@ export function navigateInvestmentView(view: InvestmentView, company?: string) {
   url.searchParams.set("view", view);
   url.searchParams.delete("lesson");
   url.searchParams.delete("page");
+  url.searchParams.delete("cycleTab");
+  url.searchParams.delete("cycleEvent");
   if (company) url.searchParams.set("company", company); else url.searchParams.delete("company");
   window.history.pushState({ view }, "", url);
   window.dispatchEvent(new CustomEvent(INVESTMENT_VIEW_EVENT, { detail: view }));
