@@ -42,6 +42,8 @@ async def run_monitor():
         if in_window:
             try:
                 result = await asyncio.to_thread(live_dashboard, config)
+                from app.cycle.strategy_sim import run_simulation
+                await asyncio.to_thread(run_simulation)
                 metadata = result.get("metadata", {})
                 quote = metadata.get("quote_time") or ""
                 monitor_status.update(

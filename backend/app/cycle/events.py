@@ -71,7 +71,7 @@ def ingest(snapshot, metadata, sectors, leaders, path=None, leader_scope="完整
                     ("market_pct", "limit_up", "limit_down", "break_rate", "yesterday_pct", "new_low", "risk")},
                 "leaders": [row for row in leaders if row.get("sector") == sector["name"]] if leaders_known else None,
                 "broken": [row for row in snapshot.get("broken_leaders", []) if row.get("sector") == sector["name"]] if broken_known else None,
-                "quote_time": quote_time, "rule_version": snapshot.get("rule_version"),
+                "quote_time": quote_time, "observed_at": observed_at, "rule_version": snapshot.get("rule_version"),
                 "leader_scope": leader_scope,
             }
             if active is None and sector.get("started") is True:
@@ -186,6 +186,11 @@ def update_plan(event_id: str, body: Plan):
         old = db.execute("SELECT * FROM events WHERE id=?", (event_id,)).fetchone()
         if not old:
             raise HTTPException(404, "事件不存在")
+        if body.status == "closed" and db.execute("SELECT 1 FROM sqlite_master WHERE name='strategy_sim'").fetchone():
+            simulation = db.execute("SELECT payload FROM strategy_sim WHERE id=1").fetchone()
+            account = json.loads(simulation["payload"]) if simulation else {}
+            if any((account.get(key) or {}).get("event_id") == event_id for key in ("position", "pending")):
+                raise HTTPException(409, "该事件有模拟持仓或挂单，请先在策略模拟请求退出并等待处理")
         try:
             db.execute("UPDATE events SET stage=?,plan=?,invalidation=?,status=? WHERE id=?",
                        (body.stage, body.plan, body.invalidation, body.status, event_id))

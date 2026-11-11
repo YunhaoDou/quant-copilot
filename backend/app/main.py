@@ -37,6 +37,7 @@ from app.cycle.radar import router as radar_router
 from app.cycle.companies import router as companies_router
 from app.cycle.events import router as events_router
 from app.cycle.event_monitor import run_monitor
+from app.cycle.strategy_sim import router as strategy_sim_router
 
 # A-share starter universe. Yahoo Finance uses .SS/.SZ suffixes for mainland listings.
 A_SHARE_UNIVERSE = {
@@ -103,6 +104,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(strategy_sim_router)
 app.include_router(events_router)
 app.include_router(cycle_router)
 app.include_router(market_router)
