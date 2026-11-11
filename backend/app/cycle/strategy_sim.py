@@ -257,6 +257,30 @@ def start():
     return {"account": account}
 
 
+@router.post("/replay-today")
+def replay_today():
+    """用户授权的起始日回溯，仅对可确定不满足前提的日期自动落账。"""
+    report = review_today()
+    with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        account = read(db)
+        if not account:
+            from app.cycle.engine import load_config
+            account = new_account(load_config())
+        completed = account.setdefault("replayed_dates", {})
+        if report["trade_date"] not in completed:
+            account.setdefault("inception_date", report["trade_date"])
+            completed[report["trade_date"]] = {
+                "reviewed_at": report["reviewed_at"], "action": report["action"],
+                "reason": report["reason"], "mode": "用户授权起始日回溯",
+            }
+            log(account, report["reviewed_at"],
+                f"起始日回放 {report['trade_date']}：{report['action']}。{report['reason']}。"
+                "符合前提的日期仍需按当时快照和后续报价逐笔复核。")
+            save(db, account)
+    return {"account": account, "review": report}
+
+
 @router.post("/pause")
 def pause():
     with database() as db:

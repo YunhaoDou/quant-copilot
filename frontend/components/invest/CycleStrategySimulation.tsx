@@ -8,6 +8,7 @@ type Account = {
   position: { name: string; symbol: string; quantity: number; entry_price: number; mark: number; mark_time: string } | null;
   pending: { side: string; symbol: string; reason: string; signal_time: string } | null;
   rules: Record<string, number>;
+  inception_date?: string;
   decisions: { time: string; text: string; event_id: string | null }[];
   trades: { time: string; side: string; symbol: string; quantity: number; price: number; pnl: number | null; reason: string }[];
 };
@@ -76,6 +77,7 @@ export default function CycleStrategySimulation() {
           ["参考权益", money(account.equity)], ["峰值回撤", `${((1-account.equity/account.peak)*100).toFixed(2)}%`],
         ].map(([label, value]) => <div key={label}><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-xl font-semibold">{value}</p></div>)}</div>
         <p className="mt-3 text-xs text-slate-500">启动 {stamp(account.created_at)} · 单仓 {account.rules.position_pct}% · 止损 {account.rules.sim_stop_loss_pct}% · 止盈 {account.rules.sim_take_profit_pct}%</p>
+        {account.inception_date && <p className="mt-2 text-xs text-slate-500">模拟执行起始日 {account.inception_date} · 起始日回溯结果见判断日志</p>}
         <p className="mt-3 text-sm">{account.position ? `${account.position.name} ${account.position.symbol} · ${account.position.quantity}股 · 入场 ${account.position.entry_price.toFixed(3)} · 参考价 ${account.position.mark.toFixed(3)} · ${stamp(account.position.mark_time)}` : "当前无模拟持仓"}</p>
         {account.pending && <p className="mt-2 text-sm text-amber-800">待处理模拟{account.pending.side === "buy" ? "买单" : "卖单"} · {account.pending.symbol} · {account.pending.reason}</p>}
       </Card>
