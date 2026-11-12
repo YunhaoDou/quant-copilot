@@ -1,0 +1,70 @@
+{
+  "as_of": "2026-11-11T15:30:00+08:00",
+  "data_timestamp": "2026-11-11T15:00:00+08:00",
+  "market": {
+    "env": "bull",
+    "index_above_key_ma": true
+  },
+  "sector": {
+    "name": "示例主线",
+    "amount_share_history": [
+      0.04,
+      0.06,
+      0.09
+    ],
+    "limit_up_counts": [
+      6,
+      7
+    ],
+    "has_3board_plus": true,
+    "has_tier_no_gap": true,
+    "adjustment_resilient": true,
+    "breakdown": false,
+    "laggards_collapsed": false
+  },
+  "stock": {
+    "symbol": "000000",
+    "is_mainline_mid_cap": true,
+    "market_cap_yi": 300,
+    "avg_turnover_yi": 20,
+    "turnover_history_yi": [
+      21,
+      22,
+      20
+    ],
+    "ma": {
+      "5": 12.0,
+      "10": 11.5,
+      "21": 11.0,
+      "55": 10.0
+    },
+    "price": 11.8,
+    "above_ma10_long": true,
+    "volume_pattern_ok": true,
+    "institutional_resonance": true,
+    "entry": {
+      "pullback_to_ma": 10,
+      "intraday_break_recovered": true,
+      "volume_shrink_ratio": 0.4,
+      "stabilizing_candle": true,
+      "next_day_confirm": true,
+      "far_from_ma10": false
+    },
+    "exit": {
+      "close_below_ma20": false,
+      "high_volume_stall": false
+    },
+    "ma_slopes": {
+      "5": 0.01,
+      "10": 0.01,
+      "21": 0.01,
+      "55": 0.01
+    }
+  },
+  "account": {
+    "has_position": false,
+    "total_asset": 1000000,
+    "invested_pct": 0,
+    "cash_pct": 1
+  }
+}

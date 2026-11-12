@@ -1,0 +1,47 @@
+{
+  "data": {
+    "max_age_hours": 24
+  },
+  "mainline": {
+    "strong_share": 0.08,
+    "potential_share": 0.05,
+    "consecutive_expand_days": 3,
+    "limit_up_min": 5,
+    "consecutive_limit_up_days": 2,
+    "require_tier_no_gap": true,
+    "require_adjustment_resilient": true
+  },
+  "leader": {
+    "market_cap_min_yi": 150,
+    "market_cap_max_yi": 1000,
+    "avg_turnover_min_yi": 10,
+    "avg_turnover_max_yi": 30,
+    "turnover_20e8_yi": 20,
+    "consecutive_turnover_20e8_days": 3,
+    "ma_periods": [5, 10, 21, 55],
+    "require_above_ma10_long": true,
+    "require_volume_pattern": true,
+    "require_institutional_resonance": true
+  },
+  "entry": {
+    "allowed_ma": [5, 10, 20],
+    "volume_shrink_ratio_max": 0.5,
+    "require_intraday_recover": true,
+    "require_stabilizing_candle": true,
+    "require_next_day_confirm": true,
+    "forbid_far_from_ma10": true
+  },
+  "exit": {
+    "ma_exit": 20,
+    "require_close_confirm": true
+  },
+  "position": {
+    "risk_per_trade": 0.02,
+    "stop_loss_pct": 0.05,
+    "env_caps": {
+      "bull": { "total": 1.0, "single": 0.33 },
+      "range": { "total": 0.6, "single": 0.25 },
+      "bear": { "total": 0.3, "single": 0.1 }
+    }
+  }
+}

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { marketApiUrl } from "@/lib/live-market";
 import { Card, buttonClass, secondaryButtonClass, money } from "./ui";
+import TrendLeaderPanel from "./TrendLeaderPanel";
 import CycleStrategySimulation from "./CycleStrategySimulation";
 
 type Account = {
@@ -62,6 +63,7 @@ export default function StrategyCenterPanel({ strategyId }: { strategyId: string
       <p className="mt-1 text-xs leading-6 text-slate-500">同一轮多个标的满足时，质量价值优先较低PE，红利现金流优先较高历史中位股息率，红利低波优先较低波动，基本面趋势优先较高年报利润增速，相对强势优先较高超额。首版每账户同时持有一只股票。</p>
       {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
     </Card>
+    {!selected && <TrendLeaderPanel />}
     {!selected && <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {data?.strategies.map(spec => <Card key={spec.id}>
         <h3 className="text-lg font-semibold">{spec.name}</h3><p className="mt-2 text-sm leading-7 text-slate-600">{spec.logic}</p>

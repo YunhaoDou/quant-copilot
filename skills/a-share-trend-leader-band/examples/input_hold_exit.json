@@ -1,0 +1,71 @@
+{
+  "_note": "反例：已持仓，收盘有效跌破20日线。走环4，decision=EXIT，仓位上限归零，禁止等反弹。",
+  "as_of": "2026-11-11T15:30:00+08:00",
+  "data_timestamp": "2026-11-11T15:00:00+08:00",
+  "market": {
+    "env": "range",
+    "index_above_key_ma": true
+  },
+  "sector": {
+    "name": "示例主线",
+    "amount_share_history": [
+      0.06,
+      0.07,
+      0.09
+    ],
+    "limit_up_counts": [
+      5,
+      6
+    ],
+    "has_3board_plus": true,
+    "has_tier_no_gap": true,
+    "adjustment_resilient": true,
+    "breakdown": false,
+    "laggards_collapsed": false
+  },
+  "stock": {
+    "symbol": "000002",
+    "is_mainline_mid_cap": true,
+    "market_cap_yi": 320,
+    "avg_turnover_yi": 18,
+    "turnover_history_yi": [
+      19,
+      20,
+      18
+    ],
+    "ma": {
+      "5": 12.4,
+      "10": 12.1,
+      "21": 11.6,
+      "55": 10.4
+    },
+    "price": 11.2,
+    "above_ma10_long": true,
+    "volume_pattern_ok": true,
+    "institutional_resonance": true,
+    "entry": {
+      "pullback_to_ma": 10,
+      "intraday_break_recovered": true,
+      "volume_shrink_ratio": 0.4,
+      "stabilizing_candle": true,
+      "next_day_confirm": true,
+      "far_from_ma10": false
+    },
+    "exit": {
+      "close_below_ma20": true,
+      "high_volume_stall": false
+    },
+    "ma_slopes": {
+      "5": 0.01,
+      "10": 0.01,
+      "21": 0.01,
+      "55": 0.01
+    }
+  },
+  "account": {
+    "has_position": true,
+    "total_asset": 1000000,
+    "invested_pct": 0,
+    "cash_pct": 1
+  }
+}
