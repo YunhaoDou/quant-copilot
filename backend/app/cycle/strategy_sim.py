@@ -63,7 +63,7 @@ def step(account, events, policy="cycle"):
     if account["status"] != "running":
         return account
     rules = account["rules"]
-    if policy == "research":
+    if policy in ("research", "trend"):
         order = lambda e: (e["latest"].get("observed_at", e["latest"]["quote_time"]), e.get("priority", 0), e["id"])
     else:
         order = lambda e: e["latest"]["quote_time"]
@@ -148,11 +148,11 @@ def step(account, events, policy="cycle"):
                 reason = "组合回撤防线"
             elif change <= -rules["sim_stop_loss_pct"]:
                 reason = "模拟价格止损"
-            elif change >= rules["sim_take_profit_pct"]:
+            elif policy != "trend" and change >= rules["sim_take_profit_pct"]:
                 reason = "模拟止盈"
             elif latest["market"].get("risk") == "高" or event["stage"] == "退潮回避":
                 reason = "市场风险或人工退潮确认"
-            elif policy == "research" and latest.get("exit_failed", latest["sector"].get("started") is False) is True:
+            elif policy in ("research", "trend") and latest.get("exit_failed", latest["sector"].get("started") is False) is True:
                 reason = "策略条件失效"
             elif policy == "cycle" and (len(event["dates"]) in rules["sim_exit_days"] or len(event["dates"]) > max(rules["sim_exit_days"])):
                 reason = "第3或第5个已采集交易日期的减险退出假设"
@@ -168,7 +168,7 @@ def step(account, events, policy="cycle"):
             day = len(event["dates"])
             rebound = policy == "cycle" and day == rules["sim_reentry_day"] and event["stage"] == "回补确认"
             leg = event.get("entry_key") or event["id"] + (":rebound" if rebound else ":start")
-            market_confirmed = policy == "research" or (
+            market_confirmed = policy in ("research", "trend") or (
                 first["market"].get("new_low") is True and event["stage"] in ("启动观察", "延续观察", "回补确认"))
             if not market_confirmed:
                 log(account, stamp, "等待：首次大盘新低数据及人工止跌/回补证据确认。当前数据不足，暂不模拟买入", event["id"])

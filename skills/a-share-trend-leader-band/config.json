@@ -18,13 +18,22 @@
     "avg_turnover_max_yi": 30,
     "turnover_20e8_yi": 20,
     "consecutive_turnover_20e8_days": 3,
-    "ma_periods": [5, 10, 21, 55],
+    "ma_periods": [
+      5,
+      10,
+      21,
+      55
+    ],
     "require_above_ma10_long": true,
     "require_volume_pattern": true,
     "require_institutional_resonance": true
   },
   "entry": {
-    "allowed_ma": [5, 10, 20],
+    "allowed_ma": [
+      5,
+      10,
+      20
+    ],
     "volume_shrink_ratio_max": 0.5,
     "require_intraday_recover": true,
     "require_stabilizing_candle": true,
@@ -39,9 +48,21 @@
     "risk_per_trade": 0.02,
     "stop_loss_pct": 0.05,
     "env_caps": {
-      "bull": { "total": 1.0, "single": 0.33 },
-      "range": { "total": 0.6, "single": 0.25 },
-      "bear": { "total": 0.3, "single": 0.1 }
+      "bull": {
+        "total": 1.0,
+        "single": 0.33
+      },
+      "range": {
+        "total": 0.6,
+        "single": 0.25
+      },
+      "bear": {
+        "total": 0.3,
+        "single": 0.1
+      }
     }
+  },
+  "simulation": {
+    "symbols_per_cycle": 6
   }
 }

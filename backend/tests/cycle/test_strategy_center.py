@@ -19,7 +19,7 @@ def test_independent_strategy_criteria_and_unknown_are_explainable():
     config = load_config()
     quote = {"price": 100, "pe": 10, "pb": 1}
     metrics = {"ma20": 95, "ma60": 90, "high20": 99, "return_base": 80, "benchmark_return": 5, "volatility": 20}
-    for spec in strategy_center.CATALOG[:-1]:
+    for spec in strategy_center.RESEARCH_CATALOG:
         result = strategy_center.evaluate(spec["id"], sample(), quote, metrics, {"yieldPct": 1.5}, config)
         assert result["status"] == "pass", spec["id"]
     assert strategy_center.evaluate("dividend-cash", sample(), quote, metrics, None, config)["status"] == "unknown"
@@ -39,8 +39,8 @@ def test_account_start_and_pause_are_isolated_and_legacy_is_reused(tmp_path, mon
     result = client.post("/strategy-center/start-all")
     assert result.status_code == 200
     strategies = result.json()["strategies"]
-    assert len(strategies) == 6
-    assert all(s["account"]["cash"] == 100000 for s in strategies[:-1])
+    assert len(strategies) == 7
+    assert all(s["account"]["cash"] == 100000 for s in strategies if s["id"] != "leader-rebound")
     assert client.post("/strategy-center/quality-value/pause").status_code == 200
     fresh = client.get("/strategy-center").json()["strategies"]
     assert fresh[0]["account"]["status"] == "paused"

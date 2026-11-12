@@ -47,6 +47,14 @@ CATALOG = [
      "entry": "见情绪周期策略模拟的市场、阶段及可成交规则。", "exit": "见现有策略的阶段窗口及风险退出。"},
 ]
 
+# 五个财务/趋势账户保留原候选池与独立更新逻辑。
+RESEARCH_CATALOG = CATALOG[:-1]
+CATALOG.append({"id":"trend-leader-band","name":"主线趋势中军波段",
+    "logic":"第七策略：主线持续性 → 趋势中军 → 缩量回踩与次日确认 → 结构退出 → 风险预算。",
+    "evidence":"严格规则的前向模拟，尚无策略有效性结论；缺失资金和主线证据时等待。",
+    "entry":"最接近相对强势趋势，但要求主线、多日梯队、中军地位及缩量回踩确认；不追连板。",
+    "exit":"固定5%止损、收盘跌破20日线或退潮信号；REDUCE首版保守退出全部单仓。"})
+
 
 def schema(db):
     db.execute("""CREATE TABLE IF NOT EXISTS research_strategy_accounts (
@@ -141,7 +149,7 @@ def refresh_signals():
         stocks = snapshot.get("stocks", [])[:config["research_universe_limit"]]
         with database() as db:
             schema(db)
-            for spec in CATALOG[:-1]:
+            for spec in RESEARCH_CATALOG:
                 account = load(db, spec["id"])
                 previous = load(db, spec["id"], "research_strategy_signals")
                 if not account or not previous:
@@ -192,7 +200,7 @@ def refresh_signals():
         now = datetime.now(TZ).isoformat()
         with database() as db:
             schema(db)
-            for spec in CATALOG[:-1]:
+            for spec in RESEARCH_CATALOG:
                 persist(db, spec["id"], {
                     "generated_at": now, "financial_date": snapshot["tradeDate"], "benchmark": benchmark,
                     "pool_total": len(snapshot["stocks"]), "checked": len(stocks),
@@ -217,7 +225,7 @@ def run_accounts():
     config = load_config()
     with database() as db:
         schema(db)
-        packages = [(spec["id"], load(db, spec["id"]), load(db, spec["id"], "research_strategy_signals")) for spec in CATALOG[:-1]]
+        packages = [(spec["id"], load(db, spec["id"]), load(db, spec["id"], "research_strategy_signals")) for spec in RESEARCH_CATALOG]
     symbols = sorted({stock["code"] for _, account, package in packages if account and account["status"] == "running" and package for stock in package["stocks"]})
     if not symbols:
         return
@@ -285,8 +293,12 @@ def catalog():
     saved_dates = [(spec.get("account") or {}).get("data", {}).get("generated_at") for spec in strategies]
     if not progress["updated_at"] and any(saved_dates):
         progress.update(state="已载入保存的核验", updated_at=max(value for value in saved_dates if value))
+    from app.cycle.trend_forward import status as trend_status
+    for spec in strategies:
+        if spec["id"] == "trend-leader-band":
+            spec["account"] = trend_status()["account"]
     return {"strategies": strategies, "refresh": progress,
-            "universe": "已完成财务核验的红利候选池；不是全市场策略排名"}
+            "universe": "前五个策略使用红利财务已核验样本；情绪回补与第七策略使用各自真实采集范围，均不是全市场策略排名"}
 
 
 @router.post("/start-all")
@@ -295,7 +307,7 @@ def start_all():
     with database() as db:
         db.execute("BEGIN IMMEDIATE")
         schema(db)
-        for spec in CATALOG[:-1]:
+        for spec in RESEARCH_CATALOG:
             account = load(db, spec["id"]) or new_account(config)
             account["status"] = "running"
             log(account, datetime.now(TZ).isoformat(), "研究策略已启动，等待真实信号与后续可成交报价。当前候选池限定为红利财务已核验样本")
@@ -303,6 +315,8 @@ def start_all():
     # 同一情绪账户沿用已有记录。
     from app.cycle.strategy_sim import start
     start()
+    from app.cycle.trend_forward import control as trend_control
+    trend_control("start")
     enqueue_refresh()
     return catalog()
 
@@ -315,7 +329,7 @@ def refresh():
 
 @router.post("/{strategy_id}/{action}")
 def control(strategy_id: str, action: str):
-    if strategy_id not in {spec["id"] for spec in CATALOG[:-1]} or action not in ("start", "pause", "exit"):
+    if strategy_id not in {spec["id"] for spec in RESEARCH_CATALOG} or action not in ("start", "pause", "exit"):
         raise HTTPException(404, "策略或动作不存在")
     with database() as db:
         db.execute("BEGIN IMMEDIATE")

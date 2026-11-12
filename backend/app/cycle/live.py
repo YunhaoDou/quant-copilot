@@ -156,7 +156,7 @@ class LiveDataProvider:
         result = []
         total = None
         for page in range(1, self.config["live_max_sector_pages"]+1):
-            payload = self.json("https://push2.eastmoney.com/api/qt/clist/get", dict(pn=page, pz=self.config["live_sector_page_size"], po=1, np=1, fltt=2, fid="f12", fs="m:90 t:2 f:!50", fields="f12,f14,f2,f3,f124"))
+            payload = self.json("https://push2.eastmoney.com/api/qt/clist/get", dict(pn=page, pz=self.config["live_sector_page_size"], po=1, np=1, fltt=2, fid="f12", fs="m:90 t:2 f:!50", fields="f12,f14,f2,f3,f6,f124"))
             data = payload.get("data")
             if not data:
                 raise ValueError("行业板块接口未返回数据")
@@ -218,7 +218,7 @@ class LiveDataProvider:
                 first = min((hhmm(r.get("fbt")) for r in members if hhmm(r.get("fbt"))), default=None)
                 change = number(row.get("f3"))
                 checks = {"板块涨幅达标": change >= self.config["sector_start_pct"] if change is not None else None, "涨停家数达标": len(members) >= self.config["sector_start_limit_up_count"] if up is not None else None, "启动时间达标": first <= self.config["sector_start_before_time"] if first else None}
-                sectors.append(dict(code=row["f12"], name=row["f14"], pct=change, limit_up=len(members) if up is not None else None, first_time=first, checks=checks, started=all(v is True for v in checks.values()), provider_time=timestamp.isoformat() if timestamp else None))
+                sectors.append(dict(code=row["f12"], name=row["f14"], pct=change, amount_yuan=number(row.get("f6")), tier_boards=sorted({int(m.get("lbc",0)) for m in members}) if up is not None else None, limit_up=len(members) if up is not None else None, first_time=first, checks=checks, started=all(v is True for v in checks.values()), provider_time=timestamp.isoformat() if timestamp else None))
             sectors.sort(key=lambda s: (not s["started"], -(s["pct"] if s["pct"] is not None else -1000)))
             attempts = len(up)+len(broken) if up is not None and broken is not None else None
             break_rate = len(broken)/attempts if attempts else 0 if attempts == 0 else None
@@ -259,6 +259,7 @@ class LiveDataProvider:
                         warnings.append(name+"分时不可用")
             all_amounts = [q["amount"] for q in quotes if q["symbol"] in ("sh000001", "sz399001") and q["timestamp"][:10] == date]
             snapshot = dict(date=date, available_at=datetime.now(TZ).isoformat(), state=state, market_close=quote["price"], market_low=quote["low"], market_pct=quote["pct"], market_amount=sum(all_amounts)/10000 if len(all_amounts) == 2 and all(n is not None for n in all_amounts) else None,
+                trend_evidence={"sectors":sectors,"leaders":leaders,"pool_complete":up is not None,"market_amount_yi":sum(all_amounts)/10000 if len(all_amounts)==2 and all(n is not None for n in all_amounts) else None},
                 new_low=None, limit_up=up_count, limit_down=down_count, height=max((r["boards"] for r in leaders), default=0) if up is not None else None, break_rate=break_rate, seal_rate=len(up)/attempts if attempts else 0 if attempts == 0 else None, yesterday_pct=mean, risk="高" if high_risk else "待核实" if state == "数据不足" else "关注", sectors=sectors[:18], leaders=leaders[:12], broken_leaders=leader_rows(broken or []),
                 card=dict(pattern={"启动":"启动龙头", "退潮":"退潮回避", "冰点":"冰点龙头", "分歧":"冲高回落风险"}.get(state,"持续观察"), state=state, action="回避" if high_risk else "观察", checks={"板块启动": any(s["started"] for s in sectors) if sectors else None, "跌停数低于风险阈值": not high_risk if down_count is not None else None, "昨日涨停表现为正": mean > 0 if mean is not None else None}, invalidation="跌停扩散、板块启动条件消失或数据过期时重新核实。", risk="盘中候选，不代表收盘确认；股票池无秒级供应商时间戳。"), rule_version=self.config["rule_version"])
             fetched = datetime.now(TZ)

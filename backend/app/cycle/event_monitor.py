@@ -42,6 +42,11 @@ async def run_monitor():
         if in_window:
             try:
                 result = await asyncio.to_thread(live_dashboard, config)
+                try:
+                    from app.cycle.trend_forward import capture
+                    await asyncio.to_thread(capture, result)
+                except Exception:
+                    logger.exception("第七策略证据采集失败，保留原策略更新")
                 from app.cycle.strategy_sim import run_simulation
                 await asyncio.to_thread(run_simulation)
                 metadata = result.get("metadata", {})
@@ -61,4 +66,9 @@ async def run_monitor():
             await asyncio.to_thread(run_accounts)
         except Exception:
             logger.exception("研究策略账户本轮更新失败")
+        try:
+            from app.cycle.trend_forward import run_forward
+            await asyncio.to_thread(run_forward)
+        except Exception:
+            logger.exception("第七策略账户本轮更新失败")
         await asyncio.sleep(config["event_poll_seconds"])

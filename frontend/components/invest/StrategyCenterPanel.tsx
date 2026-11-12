@@ -63,7 +63,6 @@ export default function StrategyCenterPanel({ strategyId }: { strategyId: string
       <p className="mt-1 text-xs leading-6 text-slate-500">同一轮多个标的满足时，质量价值优先较低PE，红利现金流优先较高历史中位股息率，红利低波优先较低波动，基本面趋势优先较高年报利润增速，相对强势优先较高超额。首版每账户同时持有一只股票。</p>
       {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
     </Card>
-    {!selected && <TrendLeaderPanel />}
     {!selected && <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {data?.strategies.map(spec => <Card key={spec.id}>
         <h3 className="text-lg font-semibold">{spec.name}</h3><p className="mt-2 text-sm leading-7 text-slate-600">{spec.logic}</p>
@@ -80,7 +79,7 @@ export default function StrategyCenterPanel({ strategyId }: { strategyId: string
         <dl className="mt-3 space-y-3 text-sm leading-7 text-slate-700">{[["逻辑", selected.logic], ["证据与边界", selected.evidence], ["入场", selected.entry], ["退出", selected.exit]].map(([label,text]) => <div key={label}><dt className="font-semibold">{label}</dt><dd>{text}</dd></div>)}</dl>
         {selected.source && <a href={selected.source} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs text-emerald-800 underline">原始研究或规则资料</a>}
       </Card>
-      {selected.id === "leader-rebound" ? <CycleStrategySimulation /> : <>
+      {selected.id === "trend-leader-band" ? <TrendLeaderPanel /> : selected.id === "leader-rebound" ? <CycleStrategySimulation /> : <>
         <Card><div className="flex flex-wrap items-center justify-between gap-3">
           <h4 className="font-semibold">独立账户 · {account?.status === "running" ? "运行中" : account ? "已暂停" : "尚未启动"}</h4>
           <div className="flex flex-wrap gap-2">{[["start","继续模拟"],["pause","暂停模拟"],["exit","请求模拟退出"]].map(([action,label]) => <button key={action} disabled={busy} className={secondaryButtonClass} onClick={() => act(`/${selected.id}/${action}`)}>{label}</button>)}</div>
