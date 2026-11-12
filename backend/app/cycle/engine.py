@@ -13,6 +13,8 @@ def load_config():
     config = json.loads(CONFIG_PATH.read_text())
     if not isinstance(config["event_poll_seconds"], int) or not 10 <= config["event_poll_seconds"] <= 3600:
         raise ValueError("事件采集间隔需为10至3600秒")
+    if not isinstance(config["research_scan_workers"],int) or not 1 <= config["research_scan_workers"] <= 16:
+        raise ValueError("全A股扫描并发需为1至16")
     positive = ["market_new_low_lookback_days", "intraday_stop_fall_bars", "intraday_bar_minutes", "sector_start_limit_up_count", "mock_days", "lot_size", "initial_capital"]
     if any(not isinstance(config[k], int) or config[k] <= 0 for k in positive):
         raise ValueError("窗口、样本数、手数与本金必须为正整数")

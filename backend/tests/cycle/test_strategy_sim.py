@@ -79,3 +79,15 @@ def test_review_uses_only_prior_window_and_keeps_live_account_unchanged(tmp_path
     with events.database() as db:
         assert strategy_sim.read(db) is None
         assert db.execute("SELECT COUNT(*) FROM strategy_reviews").fetchone()[0] == 1
+
+
+def test_star_board_requires_at_least_200_shares():
+    a=account()
+    for clock in ('10:00:00','10:01:00'):
+        e=event(clock=clock,price=60)
+        e['latest']['leaders']=[{'symbol':'688001'}]
+        e['latest']['watched'][0]['symbol']='688001'
+        q=e['latest']['watched'][0]['quote'];q['code']='688001';q['previous_close']=60
+        step(a,[e])
+    assert not a['trades'] and a['position'] is None
+    assert any('最低申报' in d['text'] for d in a['decisions'])

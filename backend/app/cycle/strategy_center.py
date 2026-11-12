@@ -84,10 +84,11 @@ def evaluate(strategy_id, stock, quote, metrics, benchmark, config):
     financial = quality.get("financialIndustry") is True
     baseline = stock.get("historicalCashPerShare")
     price = quote["price"]
-    checks = []
+    import re
+    checks = [{"label":"非风险警示、退市或新股特殊交易阶段", "passed":not any(re.search(r"ST|退|^[NC]", name, re.I) for name in (stock.get("name", ""), quote.get("name", "")))}]
     if strategy_id != "relative-trend":
-        checks.append({"label": "非金融财务证据支持", "passed": None if not quality or quality.get("status") == "unknown" else
-                       quality.get("status") == "supported" and not financial})
+        tier = quality.get("financialEvidenceStatus",quality.get("status")) if strategy_id in ("quality-value","fundamental-trend") else quality.get("status")
+        checks.append({"label": "非金融财务证据支持", "passed": None if not quality or tier in (None,"unknown") else tier == "supported" and not financial})
     if strategy_id == "quality-value":
         checks.extend([
             check("动态PE", quote.get("pe"), .01, config["research_value_pe_max"]),
@@ -142,11 +143,15 @@ def evaluate(strategy_id, stock, quote, metrics, benchmark, config):
 
 
 def refresh_signals():
-    from app.cycle.dividends import board
+    from app.cycle import all_a
     try:
         config = load_config()
-        snapshot = board()
-        stocks = snapshot.get("stocks", [])[:config["research_universe_limit"]]
+        snapshot = all_a.saved()
+        today = datetime.now(TZ).date().isoformat()
+        if not snapshot or snapshot.get("tradeDate") != today or snapshot.get("evidence_state") != "财报与分红读取完成":
+            snapshot = all_a.refresh()
+        stocks = list(snapshot["stocks"])
+        _refresh.update(scope="all-a",total=len(stocks),checked=0,state="正在核验全A股日线")
         with database() as db:
             schema(db)
             for spec in RESEARCH_CATALOG:
@@ -158,8 +163,8 @@ def refresh_signals():
                 for stock in previous["stocks"]:
                     if stock["code"] in needed and stock["code"] not in {row["code"] for row in stocks}:
                         stocks.append({**stock, "retained_only": True})
-        if not stocks or snapshot.get("strategyVersion", 0) < 3:
-            raise ValueError("请先完成真实红利财务扫描")
+        if not stocks or snapshot.get("scope") != "all-a":
+            raise ValueError("完整全A股母池尚未就绪")
         today = datetime.now(TZ).date().isoformat()
         # 财务字段仍有研究时效要求；不把多年旧快照当作当前资格。
         if (datetime.now(TZ).date() - datetime.fromisoformat(snapshot["tradeDate"]).date()).days > config["research_financial_cache_days"]:
@@ -171,7 +176,12 @@ def refresh_signals():
         base = base[base.trade_date < today].sort_values("trade_date").tail(61)
         benchmark_dates = base.trade_date.tolist()
         benchmark_return = (float(base.close.iloc[-1])/float(base.close.iloc[0])-1)*100 if len(base) == 61 else None
-        results, failures = {}, []
+        with database() as db:
+            db.execute("CREATE TABLE IF NOT EXISTS research_daily_cache (as_of TEXT,symbol TEXT,payload TEXT,PRIMARY KEY(as_of,symbol))")
+            allowed={stock["code"] for stock in stocks}
+            results={row[0]:json.loads(row[1]) for row in db.execute("SELECT symbol,payload FROM research_daily_cache WHERE as_of=?",(today,)) if row[0] in allowed}
+        failures = []
+        _refresh.update(checked=len(results))
         def collect(stock):
             frame = fetch_daily(stock["code"], 100)
             frame = frame[frame.trade_date < today].sort_values("trade_date")
@@ -180,6 +190,8 @@ def refresh_signals():
             # 与宽基按相同交易日对齐，缺失或停牌时相对收益保留未知。
             aligned = frame.set_index("trade_date").reindex(benchmark_dates)
             closes = frame.close.astype(float)
+            if not np.isfinite(closes).all() or (closes <= 0).any():
+                raise ValueError("日线价格含非有限或非正值")
             relative_valid = len(benchmark_dates) == 61 and not aligned.close.isna().any()
             return stock["code"], dict(
                 ma20=float(closes.tail(20).mean()), ma60=float(closes.tail(60).mean()),
@@ -189,35 +201,40 @@ def refresh_signals():
                 benchmark_return=benchmark_return if relative_valid else None,
                 history_through=frame.trade_date.max(),
             )
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            tasks = {pool.submit(collect, stock): stock["code"] for stock in stocks}
+        with ThreadPoolExecutor(max_workers=config["research_scan_workers"]) as pool:
+            tasks = {pool.submit(collect, stock): stock["code"] for stock in stocks if stock["code"] not in results}
             for future in as_completed(tasks):
                 try:
                     code, metrics = future.result()
                     results[code] = metrics
+                    with database() as db:
+                        db.execute("INSERT OR REPLACE INTO research_daily_cache VALUES(?,?,?)",(today,code,encode(metrics)))
                 except Exception as exc:
                     failures.append(f"{tasks[future]}：{str(exc)[:120]}")
+                _refresh.update(checked=len(results)+len(failures),total=len(stocks))
         now = datetime.now(TZ).isoformat()
         with database() as db:
             schema(db)
             for spec in RESEARCH_CATALOG:
                 persist(db, spec["id"], {
-                    "generated_at": now, "financial_date": snapshot["tradeDate"], "benchmark": benchmark,
+                    "scope":"all-a", "generated_at": now, "financial_date": snapshot["tradeDate"], "benchmark": benchmark,
                     "pool_total": len(snapshot["stocks"]), "checked": len(stocks),
                     "stocks": [{**stock, "metrics": results.get(stock["code"], {})} for stock in stocks],
                     "failures": failures,
                 }, "research_strategy_signals")
-        _refresh.update(state="核验完成", updated_at=now, error=None)
+        _refresh.update(state="核验完成", updated_at=now, error=None, valid=len(results),failed=len(failures))
         run_accounts()
     except Exception as exc:
         _refresh.update(state="核验失败", error=str(exc)[:200])
+    finally:
+        _refresh["running"] = False
 
 
 def enqueue_refresh():
     with _lock:
-        if _refresh["state"] == "正在核验":
+        if _refresh.get("running"):
             return
-        _refresh.update(state="正在核验", error=None)
+        _refresh.update(state="正在核验", error=None, running=True)
         _executor.submit(refresh_signals)
 
 
@@ -226,6 +243,8 @@ def run_accounts():
     with database() as db:
         schema(db)
         packages = [(spec["id"], load(db, spec["id"]), load(db, spec["id"], "research_strategy_signals")) for spec in RESEARCH_CATALOG]
+    if any(account and account["status"] == "running" and (not package or package.get("scope") != "all-a") for _,account,package in packages):
+        enqueue_refresh()
     symbols = sorted({stock["code"] for _, account, package in packages if account and account["status"] == "running" and package for stock in package["stocks"]})
     if not symbols:
         return
@@ -246,7 +265,7 @@ def run_accounts():
             continue
         for stock in package["stocks"]:
             quote = quotes.get(stock["code"])
-            if not quote or quote["quote_time"][:10] != now.date().isoformat():
+            if not quote or not quote.get("price") or quote["price"] <= 0 or quote["quote_time"][:10] != now.date().isoformat():
                 continue
             age = (now-datetime.fromisoformat(quote["quote_time"])).total_seconds()
             result = evaluate(name, stock, quote, stock["metrics"], package.get("benchmark"), config)
@@ -255,7 +274,7 @@ def run_accounts():
             in_session = now.weekday() < 5 and ("09:30" <= clock <= "11:30" or "13:00" <= clock <= "15:00")
             if not in_session or not 0 <= age <= config["live_stale_seconds"]:
                 continue
-            condition = None if result["status"] == "unknown" or stock.get("retained_only") else result["status"] == "pass"
+            condition = None if result["status"] == "unknown" or stock.get("retained_only") or package.get("scope") != "all-a" else result["status"] == "pass"
             signals.append({
                 "id": f"{name}:{stock['code']}", "status": "active", "stage": "", "dates": [],
                 "entry_key": f"{stock['code']}:{quote['quote_time'][:10]}",
@@ -274,9 +293,17 @@ def run_accounts():
             current = load(db, name)
             if not current or current["status"] != "running":
                 continue
-            current["candidates"] = candidates
-            current["data"] = {k: package[k] for k in ("generated_at", "financial_date", "pool_total", "checked", "failures")}
+            current["candidate_count"] = len(candidates)
+            current["candidates"] = sorted(candidates,key=lambda c:(c["status"]!="pass",c["priority"],c["code"]))[:config["research_display_limit"]]
+            current["data"] = {"scope":package.get("scope","legacy-limited"),**{k: package[k] for k in ("generated_at", "financial_date", "pool_total", "checked", "failures")}}
+            previous_trade_count = len(current["trades"])
+            entry_scope=(current.get("position") or {}).get("universe_scope","切换全A股之前的原范围")
+            previous_position=current.get("position")
             step(current, signals, policy="research")
+            for trade in current["trades"][previous_trade_count:]:
+                trade["universe_scope"] = ("all-a" if package.get("scope") == "all-a" else "原范围") if trade["side"]=="buy" else ("all-a" if entry_scope=="all-a" else "切换前持仓退出")
+            if current.get("position") and not previous_position:
+                current["position"]["universe_scope"]=package.get("scope","legacy-limited")
             if not signals:
                 log(current, now.isoformat(), "等待新鲜报价，当前为休市或数据不可用")
             elif not current["position"] and not current["pending"]:
@@ -291,14 +318,19 @@ def catalog():
         strategies = [{**spec, "account": load(db, spec["id"]) if spec["id"] != "leader-rebound" else None} for spec in CATALOG]
     progress = dict(_refresh)
     saved_dates = [(spec.get("account") or {}).get("data", {}).get("generated_at") for spec in strategies]
-    if not progress["updated_at"] and any(saved_dates):
-        progress.update(state="已载入保存的核验", updated_at=max(value for value in saved_dates if value))
+    if not progress["updated_at"] and not progress.get("running") and any(saved_dates):
+        saved_data=next(((spec.get("account") or {}).get("data",{}) for spec in strategies if (spec.get("account") or {}).get("data")),{})
+        failed=len(saved_data.get("failures",[]))
+        progress.update(state="已载入保存的核验", updated_at=max(value for value in saved_dates if value),total=saved_data.get("pool_total",0),checked=saved_data.get("checked",0),failed=failed,valid=max(0,saved_data.get("checked",0)-failed))
     from app.cycle.trend_forward import status as trend_status
     for spec in strategies:
         if spec["id"] == "trend-leader-band":
             spec["account"] = trend_status()["account"]
-    return {"strategies": strategies, "refresh": progress,
-            "universe": "前五个策略使用红利财务已核验样本；情绪回补与第七策略使用各自真实采集范围，均不是全市场策略排名"}
+    from app.cycle.experiment import setup
+    from app.cycle import all_a
+    universe = all_a.saved()
+    return {"experiment":setup(),"market_scan":{**all_a.state,"total":(universe or {}).get("total",0),"evidence_state":(universe or {}).get("evidence_state")},"strategies": strategies, "refresh": progress,
+            "universe": "沪深北完整A股母池；各策略按自身条件筛选，未满足条件或证据缺失保持空仓；当前扫描覆盖率见进度"}
 
 
 @router.post("/start-all")
@@ -310,7 +342,7 @@ def start_all():
         for spec in RESEARCH_CATALOG:
             account = load(db, spec["id"]) or new_account(config)
             account["status"] = "running"
-            log(account, datetime.now(TZ).isoformat(), "研究策略已启动，等待真实信号与后续可成交报价。当前候选池限定为红利财务已核验样本")
+            log(account, datetime.now(TZ).isoformat(), "研究策略已启动，等待真实信号与后续可成交报价。当前母池为完整沪深北A股，缺失证据不建仓")
             persist(db, spec["id"], account)
     # 同一情绪账户沿用已有记录。
     from app.cycle.strategy_sim import start

@@ -13,7 +13,12 @@
   "ice_limit_up_count": 15,
   "acceleration_height": 4,
   "break_rate_risk": 0.4,
-  "backtest_forward_days": [1, 2, 3, 5],
+  "backtest_forward_days": [
+    1,
+    2,
+    3,
+    5
+  ],
   "buy_cost_bps": 5,
   "sell_cost_bps": 5,
   "slippage_bps": 5,
@@ -22,11 +27,13 @@
   "lot_size": 100,
   "sim_start_max_days": 2,
   "sim_reentry_day": 4,
-  "sim_exit_days": [3, 5],
+  "sim_exit_days": [
+    3,
+    5
+  ],
   "sim_stop_loss_pct": 8,
   "sim_take_profit_pct": 15,
   "sim_drawdown_limit_pct": 20,
-  "research_universe_limit": 100,
   "research_financial_cache_days": 90,
   "research_bond_cache_days": 10,
   "research_value_pe_max": 20,
@@ -75,5 +82,9 @@
   "dividend_low_position_pct": 35,
   "dividend_high_position_pct": 70,
   "mock_seed": 42,
-  "mock_days": 120
+  "mock_days": 120,
+  "research_scan_workers": 8,
+  "experiment_start_date": "2026-11-11",
+  "experiment_review_date": "2027-05-11",
+  "research_display_limit": 100
 }

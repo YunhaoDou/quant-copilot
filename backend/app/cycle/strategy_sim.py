@@ -106,9 +106,10 @@ def step(account, events, policy="cycle"):
                         budget = min(account["cash"], account["equity"] * rules["position_pct"]/100)
                         unit = fill * (1+rules["buy_cost_bps"]/10000)
                         quantity = int(budget/unit/rules["lot_size"]) * rules["lot_size"]
-                        if quantity <= 0:
+                        minimum_quantity = 200 if pending["symbol"].startswith(("688","689")) else rules["lot_size"]
+                        if quantity < minimum_quantity:
                             account["pending"] = None
-                            log(account, stamp, "放弃模拟买入：预算不足一手", event["id"])
+                            log(account, stamp, "放弃模拟买入：预算不足该板块最低申报数量", event["id"])
                             continue
                         cost = quantity*unit
                         account["cash"] -= cost

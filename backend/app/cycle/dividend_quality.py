@@ -111,7 +111,7 @@ def assess_quality(stock, statements, config):
         "cashProfitRatio": ocf / profit if not financial and ocf is not None and profit is not None and profit > 0 else None, "fcfCover": None if financial else cover,
         "debtPct": None if financial else debt, "operatingCash": None if financial else ocf,
         "monetaryFunds": None if financial else number(balance.get("MONETARYFUNDS")),
-        "deductedProfits": earnings, "historicalYield": baseline / stock["price"] * 100 if baseline else None,
+        "deductedProfits": earnings, "historicalYield": baseline / stock["price"] * 100 if baseline and stock.get("price") and stock["price"] > 0 else None,
         "flags": flags, "financialIndustry": financial,
     }
 

@@ -99,6 +99,11 @@ def run_forward():
             if not account or account["status"] != "running":
                 return
             cfg = json.loads((BASE/"config.json").read_text())
+            from app.cycle.all_a import saved as all_a_saved
+            universe = all_a_saved()
+            if universe:
+                for stock in universe["stocks"]:
+                    db.execute("INSERT OR IGNORE INTO trend_forward_symbols VALUES(?)",(stock["code"],))
             all_symbols = [row[0] for row in db.execute("SELECT symbol FROM trend_forward_symbols ORDER BY symbol")]
         required = [(account.get(k) or {}).get("symbol") for k in ("position","pending")]
         cursor = account.get("scan_cursor",0)
@@ -141,7 +146,7 @@ def status():
         rows = db.execute("SELECT stamp FROM trend_forward_captures ORDER BY stamp").fetchall()
         count = db.execute("SELECT count(*) FROM trend_forward_symbols").fetchone()[0]
     return {"account":account,"capture_count":len(rows),"capture_dates":sorted({r[0][:10] for r in rows}),
-        "symbols":count,"scope":"已采集完整涨停池中的标的及页面查询跟踪标的；不是全市场扫描",
+        "symbols":count,"scope":"完整A股母池轮转核验；每轮数量受公开接口限速约束，不代表全市场实时扫描已完成",
         "limitations":["主线多日证据与资金共振未核验时保持等待；不以涨幅代替资金性质", "REDUCE首版按单仓全部退出，尚未实现分批减仓", "沿用T+1、整手、滑点及涨跌停限制；未模拟盘口排队", "不复权日线遇除权不连续时需复核，不声称已处理公司行为"]}
 
 

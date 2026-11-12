@@ -13,10 +13,10 @@ type Account = {
   data?: { generated_at: string; financial_date: string; pool_total: number; checked: number; failures: string[] };
   rules: Record<string, number>;
   decisions: { time: string; text: string }[];
-  trades: { time: string; symbol: string; side: string; price: number; quantity: number; pnl: number | null; reason: string }[];
+  trades: { time: string; symbol: string; side: string; price: number; quantity: number; pnl: number | null; reason: string; universe_scope?:string }[];
 };
 type Strategy = { id: string; name: string; logic: string; evidence: string; entry: string; exit: string; source?: string; account: Account | null };
-type Payload = { strategies: Strategy[]; refresh: { state: string; error: string | null; updated_at: string | null }; universe: string };
+type Payload = { experiment?: {start_date:string;review_date:string;changed_at:string;notes:string[]}; market_scan?: {total:number;state:string;evidence_state:string;error:string|null}; strategies: Strategy[]; refresh: { state: string; error: string | null; updated_at: string | null;total?:number;checked?:number;valid?:number;failed?:number }; universe: string };
 const url = "/invest?view=strategies";
 const time = (value: string) => new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
 const status = (value: string) => ({ pass: "条件满足", fail: "条件未满足", unknown: "数据不足" }[value] || value);
@@ -58,7 +58,9 @@ export default function StrategyCenterPanel({ strategyId }: { strategyId: string
         <button disabled={busy} className={buttonClass} onClick={() => act("/start-all")}>启动全部独立模拟</button>
         <button disabled={busy} className={secondaryButtonClass} onClick={() => act("/refresh")}>更新候选与日线</button>
       </div></div>
+      {data?.experiment && <div className="mt-4 rounded-xl bg-emerald-50 p-4 text-sm leading-7 text-emerald-950"><p className="font-semibold">半年观察期：{data.experiment.start_date} 起 · {data.experiment.review_date} 复核</p><p>统一全A股母池，达不到交易条件就空仓。</p><p className="text-xs">切换前缺少完整全A股采集，已有交易按原范围标记；不补造昨天的交易或信号。</p></div>}
       <p className="mt-3 text-xs leading-6 text-slate-500">{data?.universe} · {data?.refresh.state || "正在读取"}{data?.refresh.error && ` · ${data.refresh.error}`}</p>
+      <p className="mt-1 text-xs leading-6 text-slate-500">完整母池 {data?.market_scan?.total ?? 0} 只 · {data?.market_scan?.evidence_state || data?.market_scan?.state} · 日线核验 {data?.refresh.checked ?? 0}/{data?.refresh.total ?? 0} · 日线可用 {data?.refresh.valid ?? "待汇总"} · 不足或失败 {data?.refresh.failed ?? "待汇总"}。页面最多显示100条候选，扫描范围不截断。{data?.market_scan?.error}</p>
       <p className="mt-1 text-xs leading-6 text-slate-500">日线信号使用当前日期以前的已完成交易日，价格和估值来自公开报价。后端在盘中核验并按后续报价撮合，休市时只更新候选观察。T+1、涨跌停等待、整手、费用和滑点沿用影子账户规则，尚未模拟盘口排队与成交量容量。</p>
       <p className="mt-1 text-xs leading-6 text-slate-500">同一轮多个标的满足时，质量价值优先较低PE，红利现金流优先较高历史中位股息率，红利低波优先较低波动，基本面趋势优先较高年报利润增速，相对强势优先较高超额。首版每账户同时持有一只股票。</p>
       {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
@@ -102,7 +104,7 @@ export default function StrategyCenterPanel({ strategyId }: { strategyId: string
           {!account?.candidates?.some(row => filter === "all" || row.status === filter) && <p className="mt-3 text-sm text-slate-500">当前没有此类候选。可切换全部查看，或等待数据核验。</p>}
         </Card>
         <Card><h4 className="font-semibold">判断日志</h4><div className="mt-3 max-h-80 overflow-auto">{account?.decisions.slice().reverse().map((row,i) => <div key={i} className="border-t py-3 text-sm leading-7"><p className="text-xs text-slate-500">{time(row.time)}</p><p>{row.text}</p></div>)}</div></Card>
-        <Card><h4 className="font-semibold">模拟成交流水</h4><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[620px] text-left text-xs"><thead><tr>{["时间","股票","方向","模拟价格","股数","净盈亏","原因"].map(text => <th className="py-2" key={text}>{text}</th>)}</tr></thead><tbody>{account?.trades.map((row,i) => <tr key={i} className="border-t"><td className="py-2">{time(row.time)}</td><td>{row.symbol}</td><td>{row.side === "buy" ? "买入" : "卖出"}</td><td>{row.price.toFixed(3)}</td><td>{row.quantity}</td><td>{row.pnl === null ? "—" : money(row.pnl)}</td><td>{row.reason}</td></tr>)}</tbody></table></div>
+        <Card><h4 className="font-semibold">模拟成交流水</h4><div className="mt-3 overflow-x-auto"><table className="w-full min-w-[620px] text-left text-xs"><thead><tr>{["时间","股票","方向","模拟价格","股数","净盈亏","原因"].map(text => <th className="py-2" key={text}>{text}</th>)}</tr></thead><tbody>{account?.trades.map((row,i) => <tr key={i} className="border-t"><td className="py-2">{time(row.time)}</td><td>{row.symbol}</td><td>{row.side === "buy" ? "买入" : "卖出"}</td><td>{row.price.toFixed(3)}</td><td>{row.quantity}</td><td>{row.pnl === null ? "—" : money(row.pnl)}</td><td>{row.reason}{row.universe_scope && <span className="block text-slate-500">范围：{row.universe_scope}</span>}</td></tr>)}</tbody></table></div>
           {!account?.trades.length && <p className="mt-3 text-sm text-slate-500">尚无模拟成交，等待有效信号和后续可成交报价。</p>}
         </Card>
       </>}
