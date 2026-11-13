@@ -1,6 +1,7 @@
 """Per-ticker news sentiment: pulls recent headlines (yfinance — no scraping, no new API
 key) and has the LLM classify each headline's likely stock-price impact as high/medium/low,
-with a one-line reason. Schema-validated with retry, Redis-cached like llm_research.py.
+with a one-line reason. Uses the shared structured_completion helper for schema validation,
+retry-with-repair and Redis caching, like llm_research.py.
 
 Chinese-market sources (华尔街见闻/新浪财经) don't apply here — this platform's universe is
 US equities (see data_ingestion.py), so yfinance's own news feed is the in-scope source.
@@ -11,16 +12,19 @@ import time
 from curl_cffi import requests as news_requests
 
 import yfinance as yf
-from pydantic import ValidationError
 from redis.asyncio import Redis
 
 from app.config import settings
 from app.schemas.news_sentiment import NewsSentimentSchema
 from app.services.i18n import DEFAULT_LANG, language_instruction
-from app.services.llm_research import LLMClient
+from app.services.llm_research import (
+    MAX_RETRIES as MAX_RETRIES,  # 保留本模块的历史导入路径（调用方与测试从这里取）
+    LLMClient,
+    read_cached_payload,
+    structured_completion,
+)
 
 MAX_HEADLINES = 10
-MAX_RETRIES = 2
 IMPACT_WEIGHT = {"high": 3, "medium": 2, "low": 1}
 
 SYSTEM_PROMPT = (
@@ -81,11 +85,11 @@ async def get_news_sentiment(
     redis: Redis, symbol: str, client: LLMClient | None = None, lang: str = DEFAULT_LANG
 ) -> dict:
     symbol = symbol.upper()
-    cached = await redis.get(_cache_key(symbol, lang))
-    if cached:
-        payload = json.loads(cached)
-        payload["cache_hit"] = True
-        return payload
+    cache_key = _cache_key(symbol, lang)
+    # Read the cache before fetching headlines so a cache hit never touches the news source.
+    cached = await read_cached_payload(redis, cache_key)
+    if cached is not None:
+        return cached
 
     headlines = _fetch_headlines(symbol)
     if not headlines:
@@ -97,29 +101,14 @@ async def get_news_sentiment(
             "high_impact_count": 0,
             "cache_hit": False,
         }
-        await redis.set(_cache_key(symbol, lang), json.dumps(payload), ex=settings.NEWS_CACHE_TTL_HOURS * 3600)
+        await redis.set(cache_key, json.dumps(payload), ex=settings.NEWS_CACHE_TTL_HOURS * 3600)
         return payload
 
-    client = client or LLMClient()
-    system_prompt = SYSTEM_PROMPT + language_instruction(lang)
-    prompt = _build_prompt(headlines)
-    last_error: Exception | None = None
+    def validate_model(validated: NewsSentimentSchema) -> None:
+        if len(validated.items) != len(headlines):
+            raise ValueError(f"expected {len(headlines)} classifications, got {len(validated.items)}")
 
-    for _attempt in range(MAX_RETRIES + 1):
-        text, _in_tok, _out_tok = client.complete(prompt, system_prompt=system_prompt)
-        try:
-            data = json.loads(text)
-            validated = NewsSentimentSchema.model_validate(data)
-            if len(validated.items) != len(headlines):
-                raise ValueError(f"expected {len(headlines)} classifications, got {len(validated.items)}")
-        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-            last_error = exc
-            prompt = (
-                _build_prompt(headlines)
-                + f"\n\nYour previous response was invalid: {exc}\nReturn ONLY the corrected JSON object."
-            )
-            continue
-
+    def payload_from_model(validated: NewsSentimentSchema) -> dict:
         items = []
         weighted_sum = 0
         high_count = 0
@@ -133,7 +122,7 @@ async def get_news_sentiment(
         avg_score = weighted_sum / len(items)
         overall_signal = "high" if avg_score >= 2.5 else "medium" if avg_score >= 1.5 else "low"
 
-        payload = {
+        return {
             "symbol": symbol,
             "items": items,
             "overall_signal": overall_signal,
@@ -141,7 +130,21 @@ async def get_news_sentiment(
             "high_impact_count": high_count,
             "cache_hit": False,
         }
-        await redis.set(_cache_key(symbol, lang), json.dumps(payload), ex=settings.NEWS_CACHE_TTL_HOURS * 3600)
-        return payload
 
-    raise ValueError(f"LLM failed to produce schema-valid news classification after {MAX_RETRIES} retries: {last_error}")
+    result = await structured_completion(
+        redis,
+        client,
+        NewsSentimentSchema,
+        _build_prompt(headlines),
+        cache_key=cache_key,
+        cache_ttl_hours=settings.NEWS_CACHE_TTL_HOURS,
+        system_prompt=SYSTEM_PROMPT + language_instruction(lang),
+        repair_prompt=lambda exc: (
+            _build_prompt(headlines)
+            + f"\n\nYour previous response was invalid: {exc}\nReturn ONLY the corrected JSON object."
+        ),
+        payload_from_model=payload_from_model,
+        validate_model=validate_model,
+        error_message="LLM failed to produce schema-valid news classification",
+    )
+    return result.payload

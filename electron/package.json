@@ -1,0 +1,44 @@
+{
+  "name": "quant-copilot-desktop",
+  "version": "0.1.0",
+  "description": "Quant Copilot desktop shell (wraps the existing Next.js frontend + FastAPI backend)",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.quantcopilot.desktop",
+    "productName": "Quant Copilot",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js"
+    ],
+    "extraResources": [
+      {
+        "from": "..",
+        "to": "app",
+        "filter": ["start.sh", "stop.sh"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.finance",
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}

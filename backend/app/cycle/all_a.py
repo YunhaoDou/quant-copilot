@@ -5,7 +5,7 @@ import json
 import time
 from threading import Lock
 import httpx
-from app.cycle.live import TZ, number
+from app.cycle.live import TZ
 from app.cycle.events import database, encode
 from app.cycle.engine import load_config
 from app.cycle.dividends import build_dividends, classify
@@ -110,8 +110,9 @@ def refresh():
             known=len(profits)==cfg["dividend_financial_years"] and all(v is not None for v in profits) and cash is not None and debt is not None
             if stock["sector"]=="待分类":known=False
             q["financialEvidenceStatus"]="financial" if q.get("financialIndustry") else "unknown" if not known else "supported" if all(v>0 for v in profits) and cash>=cfg["dividend_screen_cash_profit_min"] and debt<cfg["dividend_debt_review_pct"] else "risk"
-            stock.pop("fiscalDistributions",None);stock.pop("dividendRecords",None)
-        payload.update(stocks=stocks,benchmark=benchmark,evidence_state="财报与分红读取完成")
+            stock.pop("fiscalDistributions",None)
+            stock.setdefault("dividendRecords",[])
+        payload.update(schema_version=2,stocks=stocks,benchmark=benchmark,evidence_state="财报与分红读取完成")
         with database() as db:db.execute("INSERT OR REPLACE INTO all_a_universe VALUES(1,?)",(encode(payload),))
         state.update(state="全A股母池与财务证据就绪",total=len(stocks),checked=len(stocks))
         return payload

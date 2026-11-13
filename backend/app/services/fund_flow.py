@@ -5,6 +5,7 @@ Primary signal is Chaikin Money Flow (CMF) — positive means buying pressure do
 window, negative means selling pressure did. It's corroborated by the share of large-volume
 days that closed up, and by OBV's short-term trend direction.
 """
+import asyncio
 from dataclasses import dataclass
 
 import numpy as np
@@ -135,7 +136,30 @@ async def get_fund_flow_signal(session: AsyncSession, symbol: str) -> dict:
     """Computes the signal from stored price history and upserts it into fund_flow_signals."""
     symbol = symbol.upper()
     df = await load_ohlcv(session, symbol)
+    on_demand = df.empty
+    if on_demand:
+        from app.cycle.market import fetch_daily, normalize_symbol
+        from app.cycle.all_a import saved
+        try:code=normalize_symbol(symbol)[2:]
+        except ValueError:
+            # 保留已有非A股内部调用的数据不足语义。
+            compute_fund_flow(df, symbol)
+            raise ValueError("need at least 20 rows")
+        from app.cycle.etf_universe import is_etf
+        if code not in {stock["code"] for stock in (saved() or {}).get("stocks",[])} and not is_etf(code):
+            raise ValueError("证券不在官方股票或ETF母池中")
+        df=await asyncio.to_thread(fetch_daily,symbol,320)
+        if not df.empty:df=df.set_index(pd.DatetimeIndex(df.trade_date))
     result = compute_fund_flow(df, symbol)
+    payload = {
+        "symbol": result.symbol, "as_of_date": result.as_of_date.date().isoformat(),
+        "signal": result.signal, "score": result.score, "cmf": result.cmf,
+        "mfi": result.mfi, "obv_trend": result.obv_trend,
+        "large_volume_bias": result.large_volume_bias, "window_days": result.window_days,
+        "method": result.method,
+    }
+    # 尚未入库的全A股证券按需计算，不写入依赖ticker外键的缓存。
+    if on_demand:return payload
 
     existing = (
         await session.execute(
@@ -160,15 +184,4 @@ async def get_fund_flow_signal(session: AsyncSession, symbol: str) -> dict:
     existing.method = result.method
     await session.commit()
 
-    return {
-        "symbol": result.symbol,
-        "as_of_date": result.as_of_date.date().isoformat(),
-        "signal": result.signal,
-        "score": result.score,
-        "cmf": result.cmf,
-        "mfi": result.mfi,
-        "obv_trend": result.obv_trend,
-        "large_volume_bias": result.large_volume_bias,
-        "window_days": result.window_days,
-        "method": result.method,
-    }
+    return payload

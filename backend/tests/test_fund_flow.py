@@ -167,3 +167,17 @@ async def test_get_fund_flow_signal_no_history_raises(db_session):
     await session.commit()
     with pytest.raises(ValueError, match="need at least"):
         await fund_flow.get_fund_flow_signal(session, "ZZZ")
+
+
+@pytest.mark.asyncio
+async def test_all_a_without_stored_history_uses_real_provider_adapter(db_session, monkeypatch):
+    from app.cycle import all_a, market
+    monkeypatch.setattr(all_a,"saved",lambda:{"stocks":[{"code":"600320"}]})
+    frame=_rising_accumulation().reset_index().rename(columns={"index":"trade_date"})
+    seen=[]
+    def daily(code,count):
+        seen.append((code,count));return frame
+    monkeypatch.setattr(market,"fetch_daily",daily)
+    result=await fund_flow.get_fund_flow_signal(db_session,"600320.SS")
+    assert result["symbol"]=="600320.SS" and result["window_days"]==20
+    assert seen==[("600320.SS",320)]

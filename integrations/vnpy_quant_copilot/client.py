@@ -6,7 +6,7 @@ from urllib.request import build_opener, ProxyHandler, Request
 STRATEGIES = {
     "quality-value":"质量价值", "dividend-cash":"红利现金流", "dividend-lowvol":"红利低波",
     "fundamental-trend":"基本面改善后趋势入场", "relative-trend":"相对强势趋势",
-    "leader-rebound":"情绪龙头回补", "trend-leader-band":"主线趋势中军波段",
+    "leader-rebound":"情绪龙头回补", "trend-leader-band":"主线趋势中军波段", "shibor-rotation":"SHIBOR红利成长轮动",
 }
 
 class LocalClient:
@@ -27,7 +27,7 @@ class LocalClient:
     def snapshot(self):
         data=self.request("/strategy-center")
         if {s["id"] for s in data.get("strategies",[])} != set(STRATEGIES):
-            raise ValueError("后端未提供完整七策略，请先启动当前Quant Copilot")
+            raise ValueError("后端未提供完整八策略，请先启动当前Quant Copilot")
         legacy=self.request("/cycle/strategy-sim")
         for spec in data["strategies"]:
             if spec["id"]=="leader-rebound":spec["account"]=legacy.get("account")

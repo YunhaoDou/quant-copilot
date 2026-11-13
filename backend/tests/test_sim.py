@@ -97,6 +97,8 @@ async def test_sim_report_ranks_and_computes_vs_spy(db_session):
 
     report = await sim.sim_report(db_session)
     assert report["benchmark"]["account"] == sim.BENCHMARK_ACCOUNT
+    assert report["benchmark"]["label"] == "美股模拟 · 标普500买入持有（基准）"
+    assert all(s["label"].startswith("美股模拟 · ") for s in report["strategies"])
     assert len(report["strategies"]) == 4
     # ranked descending by return
     returns = [s["total_return_pct"] for s in report["strategies"]]

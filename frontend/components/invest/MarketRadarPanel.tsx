@@ -1,4 +1,6 @@
 "use client";
+import WorkspaceTabs from "./WorkspaceTabs";
+import LiveAllocation from "./modules/live-allocation";
 import { useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { marketApiUrl } from "@/lib/live-market";
@@ -16,7 +18,9 @@ const time=(v:string|null|undefined)=>v?new Date(v).toLocaleString("zh-CN"):"未
 const pct=(v:number|undefined|null)=>v==null?"未知":`${v>0?"+":""}${v.toFixed(2)}%`;
 function httpUrl(v:string){try{const u=new URL(v);return ["http:","https:"].includes(u.protocol)&&!u.username&&!u.password;}catch{return false;}}
 
-export default function MarketRadarPanel({state,setState}:Props){
+export default function MarketRadarPanel({state,setState}:Props){return <WorkspaceTabs label="市场雷达功能" tabs={[{id:"environment",label:"环境与主线",content:<MarketEnvironment state={state} setState={setState}/>},{id:"allocation",label:"股债趋势",content:<LiveAllocation/>}]}/>;}
+
+function MarketEnvironment({state,setState}:Props){
  const [showKline,setShowKline]=useState(false);
  const [data,setData]=useState<Radar|null>(null),[error,setError]=useState(""),[loading,setLoading]=useState(true),[reload,setReload]=useState(0);
  const [theme,setTheme]=useState<Omit<MarketTheme,"id">>(emptyTheme),[themeId,setThemeId]=useState<string|null>(null),[showTheme,setShowTheme]=useState(false),[themeError,setThemeError]=useState(""),[filter,setFilter]=useState("全部");

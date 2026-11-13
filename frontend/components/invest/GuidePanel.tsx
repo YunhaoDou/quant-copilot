@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { INVESTMENT_VIEWS, type InvestmentView } from "@/lib/invest-navigation";
+import { viewTargetLabel, type ViewTarget } from "@/lib/invest-navigation";
 import { Card, secondaryButtonClass } from "./ui";
 import { knowledgeChapters } from "./guide-knowledge";
 import { projectSections } from "./guide-project";
@@ -8,7 +8,7 @@ import { courses } from "./guide-courses";
 import { deeperReadings } from "./guide-readings";
 import GuideCharts from "./GuideCharts";
 
-const guideUrl = "/invest?view=guide";
+const guideUrl = "/invest?view=help&tab=guide";
 const progressKey = "quant-copilot-guide-progress-v1";
 
 const courseParts = [
@@ -76,7 +76,7 @@ const basics = [
   ["A股常见交易约束", "普通A股当天买入通常要到下一交易日才能卖出。部分ETF允许当日回转，交易规则按品种核对。涨跌停时可能有报价但难以成交，实际还受流动性、排队、费用和滑点影响。"],
 ];
 
-export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (view: InvestmentView) => void; lesson: string | null; page: string | null }) {
+export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (view: ViewTarget, tab?: string) => void; lesson: string | null; page: string | null }) {
   const courseIndex = courses.findIndex(({ id }) => id === lesson);
   const course = courses[courseIndex];
   const courseId = course?.id;
@@ -193,11 +193,11 @@ export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (
               </details>
             </section>}
 
-            {projectSections.filter(({ id }) => id === activePage).map(({ id, title, view, entries }) => (
+            {projectSections.filter(({ id }) => id === activePage).map(({ id, title, view, tab, entries }) => (
               <section id={id} className="scroll-mt-6" key={id}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h4 className="text-xl font-semibold">{title}</h4>
-                  <button className={secondaryButtonClass} onClick={() => onNavigate(view)}>打开{INVESTMENT_VIEWS.find((item) => item.id === view)?.label}</button>
+                  <button className={secondaryButtonClass} onClick={() => onNavigate(view, tab)}>打开{viewTargetLabel(view)}</button>
                 </div>
                 <dl className="mt-3 divide-y divide-slate-100">
                   {entries.map(([label, instructions]) => (
@@ -217,7 +217,7 @@ export default function GuidePanel({ onNavigate, lesson, page }: { onNavigate: (
                 <div><dt className="font-semibold text-slate-900">情绪周期的「板块启动」怎么看？</dt><dd>系统同时检查板块涨幅、匹配到的涨停股数量和最早首次涨停时间。具体阈值在情绪周期的「设置与说明」中查看。三项都满足才标为启动。真实行情中，时间取该行业在涨停池中匹配到的股票的最早首次涨停时间。没有匹配或缺少时间时会显示「未知」。</dd></div>
                 <div><dt className="font-semibold text-slate-900">为什么看到几个不同的日期？</dt><dd>公开行情有供应商时间和本机获取时间，休市时通常显示最近报价。日K线有自己的截至交易日，红利列表有扫描快照日期。查看公司详情时以各指标旁的来源、日期与口径为准。缺失值或延迟未知要保留为未知。</dd></div>
                 <div><dt className="font-semibold text-slate-900">回撤预警怎么算？</dt><dd>驾驶舱与市场雷达共用当前资产、资产峰值和回撤上限。预警点是上限的50%、75%、90%和100%。上限20%时对应10%、15%、18%和20%。出入金会改变资产口径，更新资产与峰值时要一起核对。价格跳空等情况可能直接越过预警线。</dd></div>
-                <div><dt className="font-semibold text-slate-900">公司笔记保存在哪里？</dt><dd>驾驶舱、公司档案和决策复盘保存在当前浏览器。同一股票代码只用一份公司档案，移出观察池后仍可在个股研究找到笔记。清理网站数据或换浏览器可能看不到原记录。情绪周期人工确认独立保存，综合研究档案和模拟账户保存在本地后端。</dd></div>
+                <div><dt className="font-semibold text-slate-900">公司笔记保存在哪里？</dt><dd>驾驶舱、公司档案和决策复盘保存在当前浏览器。同一股票代码只用一份公司档案，移出观察池后仍可在个股研究找到笔记。清理网站数据或换浏览器可能看不到原记录。情绪周期人工确认独立保存，「交易与模拟」的分析档案及模拟账户保存在本地后端。</dd></div>
                 <div><dt className="font-semibold text-slate-900">系统能同步券商或下单吗？</dt><dd>当前支持手动维护和本地券商快照导入。公开行情会更新，真实账户的资金、持仓和成交仍以券商为准。模拟交易使用虚拟账户，实际成交约束只在相应工具支持时纳入。</dd></div>
                 <div><dt className="font-semibold text-slate-900">模拟数据、真实行情和AI怎么看？</dt><dd>情绪周期的真实入口展示已采集行情和快照，真实历史回测仍受数据覆盖限制。CSV结果依赖导入数据，演示数据用于熟悉界面。估值和组合推演随假设变化，AI输出属于待核实分析。历史统计不代表未来，结果仅供研究。</dd></div>
               </dl>

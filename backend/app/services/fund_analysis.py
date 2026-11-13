@@ -7,15 +7,14 @@ merge would need T+1 alignment handling for QDII funds, which this MVP skips.
 """
 from dataclasses import dataclass
 
-import akshare as ak
-import numpy as np
 import pandas as pd
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services import fund_data
+from app.services import fund_data, indicators
 
 TRADING_DAYS_PER_YEAR = 252
+RISK_FREE_RATE = 0.02  # annualized, MVP simplification (2%/yr)
 
 WARNING_HIGH = 1.5
 DANGER_HIGH = 3.0
@@ -84,32 +83,37 @@ def get_premium_snapshot(code: str, fund_type: str) -> PremiumSnapshot | None:
 
 def compute_metrics(nav_series: pd.Series) -> dict:
     """Total/annualized return, volatility, Sharpe, max drawdown, win rate from a
-    date-indexed nav/close series. Risk-free rate fixed at 2%/yr (MVP simplification)."""
+    date-indexed nav/close series. Risk-free rate fixed at 2%/yr (MVP simplification).
+
+    Conventions preserved from this panel: annualization counts the first observation as
+    a period (``periods=len(nav_series)``), the Sharpe denominator is the annualized
+    volatility of the return series, and every figure is percent/2dp (Sharpe 4dp)."""
     if len(nav_series) < 2:
         return {
             "total_return": 0.0, "annualized_return": 0.0, "volatility": 0.0,
             "sharpe_ratio": 0.0, "max_drawdown": 0.0, "win_rate": 0.0, "window_days": len(nav_series),
         }
 
-    daily_returns = nav_series.pct_change().dropna() * 100
-    total_return = (nav_series.iloc[-1] / nav_series.iloc[0] - 1) * 100
-    years = len(nav_series) / TRADING_DAYS_PER_YEAR
-    annualized_return = ((nav_series.iloc[-1] / nav_series.iloc[0]) ** (1 / years) - 1) * 100 if years > 0 else 0.0
-    volatility = float(daily_returns.std() * np.sqrt(TRADING_DAYS_PER_YEAR))
+    daily_returns = nav_series.pct_change().dropna()
+    total_return = indicators.total_return(nav_series) * 100
+    annualized_return = indicators.annualized_return(
+        nav_series, periods_per_year=TRADING_DAYS_PER_YEAR, periods=len(nav_series)
+    ) * 100
+    volatility = indicators.annualized_volatility(daily_returns, TRADING_DAYS_PER_YEAR) * 100
 
-    rf_daily = 2.0 / TRADING_DAYS_PER_YEAR
-    excess = daily_returns - rf_daily
-    sharpe = float(excess.mean() / excess.std() * np.sqrt(TRADING_DAYS_PER_YEAR)) if excess.std() else 0.0
+    sharpe = indicators.sharpe(daily_returns, risk_free=RISK_FREE_RATE, periods_per_year=TRADING_DAYS_PER_YEAR)
+    # The old implementation returned 0.0 (not NaN) when the return series had no spread;
+    # indicators.sharpe returns None exactly for that zero-volatility case.
+    sharpe_ratio = 0.0 if sharpe is None else sharpe
 
-    rolling_max = nav_series.cummax()
-    max_drawdown = float(((nav_series - rolling_max) / rolling_max * 100).min())
-    win_rate = float((daily_returns > 0).mean() * 100)
+    max_drawdown = indicators.max_drawdown(nav_series) * 100
+    win_rate = indicators.win_rate(daily_returns) * 100
 
     return {
         "total_return": round(float(total_return), 2),
         "annualized_return": round(annualized_return, 2),
         "volatility": round(volatility, 2),
-        "sharpe_ratio": round(sharpe, 4),
+        "sharpe_ratio": round(float(sharpe_ratio), 4),
         "max_drawdown": round(max_drawdown, 2),
         "win_rate": round(win_rate, 2),
         "window_days": len(nav_series),

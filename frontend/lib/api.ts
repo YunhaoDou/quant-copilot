@@ -27,15 +27,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export type PricePoint = {
-  date: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-};
-
 export type BacktestResult = {
   strategy_key: string;
   label: string;
@@ -62,8 +53,30 @@ export type ResearchNote = {
 export type PaperAccount = {
   id: number;
   name: string;
+  /** 展示用中文名（如 "美股模拟 · 均线交叉"）；新账户没有时回退 name。 */
+  label?: string;
   starting_cash: number;
   cash_balance: number;
+};
+
+export type LegacySimStanding = {
+  account: string;
+  label?: string;
+  days_logged: number;
+  starting_cash: number;
+  equity: number;
+  total_return_pct: number;
+  vs_spy_pct: number | null;
+};
+
+export type LegacySimReport = {
+  benchmark: LegacySimStanding | null;
+  strategies: LegacySimStanding[];
+};
+
+export type LegacySimCurve = {
+  account: string;
+  series: { date: string; equity: number }[];
 };
 
 export type PaperOrder = {
@@ -141,47 +154,11 @@ export type RiskSnapshot = {
   thresholds: { max_position_weight: number; min_cash_pct: number; max_drawdown: number };
 };
 
-export type SimStanding = {
-  account: string;
-  days_logged: number;
-  starting_cash: number;
-  equity: number;
-  total_return_pct: number;
-  vs_spy_pct: number | null;
-};
-
-export type SimReport = {
-  benchmark: SimStanding | null;
-  strategies: SimStanding[];
-};
-
-export type SimCurve = {
-  account: string;
-  series: { date: string; equity: number }[];
-};
-
-export type AssetAllocation = {
-  as_of_date: string;
-  regime: "recovery" | "overheat" | "stagflation" | "reflation";
-  growth_trend: "up" | "down";
-  rate_trend: "rising" | "falling";
-  spy_vs_200ma_pct: number;
-  yield_10y: number;
-  yield_3m: number | null;
-  yield_curve_spread: number | null;
-  yield_10y_change_63d: number;
-  suggested_stock_pct: number;
-  suggested_bond_pct: number;
-  etf_recommendation: { equity: string; bond: string };
-  method: string;
-  disclaimer: string;
-};
-
 export type ScreeningResult = {
-  symbol: string;
+  symbol: string; name?:string; status?:string;
   as_of_date: string;
-  rank: number;
-  composite_score: number;
+  rank: number | null;
+  composite_score: number | null;
   factors: Record<string, number | null>;
   reasons: string[];
 };
@@ -189,6 +166,7 @@ export type ScreeningResult = {
 export type ScreeningResponse = {
   results: ScreeningResult[];
   universe_size: number;
+  status?: string; progress?:string; scored?:number; unknown?:number; checked?:number; updated_at?:string;
 };
 
 export type ComplianceAnswer = {
@@ -270,7 +248,6 @@ export type FundAnalysis = {
 export const api = {
   ingestTicker: (symbol: string, name: string) =>
     request(`/tickers/${symbol}/ingest?name=${encodeURIComponent(name)}&market=CN`, { method: "POST" }),
-  getPrices: (symbol: string) => request<PricePoint[]>(`/tickers/${symbol}/prices`),
   compareStrategies: (symbol: string) =>
     request<{ symbol: string; results: BacktestResult[] }>("/backtest/compare", {
       method: "POST",
@@ -316,31 +293,23 @@ export const api = {
     request<ComplianceAnswer>("/compliance", { method: "POST", body: JSON.stringify({ question, lang }) }),
 
   // Multi-factor screening
-  runScreening: (topN: number = 10, lang: string = "en") =>
-    request<ScreeningResponse>("/screening", { method: "POST", body: JSON.stringify({ top_n: topN, lang }) }),
-
-  // Macro-regime asset allocation
-  getAllocation: () => request<AssetAllocation>("/allocation"),
-
-  // Sim
-  getSimReport: () => request<SimReport>("/sim/report"),
-  getSimCurves: () => request<SimCurve[]>("/sim/curves"),
+  runScreening: (topN: number | null = null, lang: string = "en") =>
+    request<ScreeningResponse>("/screening", { method: "POST", body: JSON.stringify({ top_n: topN, lang, refresh: true }) }),
 
   // Settings
+  // 遗留美股策略模拟（只读：4 个旧模板 + SPY 基准）
+  getLegacySimReport: () => request<LegacySimReport>("/sim/report"),
+  getLegacySimCurves: () => request<LegacySimCurve[]>("/sim/curves"),
+
   getSettings: () => request<AppSettingsView>("/settings"),
   updateSettings: (update: AppSettingsUpdate) =>
     request<AppSettingsView>("/settings", { method: "PUT", body: JSON.stringify(update) }),
 };
 
 export type AppSettingsView = {
-  deepseek_api_key_set: boolean;
-  deepseek_api_key_masked: string;
   news_cache_ttl_hours: number;
-  llm_cache_ttl_hours: number;
 };
 
 export type AppSettingsUpdate = {
-  deepseek_api_key?: string;
   news_cache_ttl_hours?: number;
-  llm_cache_ttl_hours?: number;
 };

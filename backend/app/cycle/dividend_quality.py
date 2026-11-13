@@ -1,8 +1,4 @@
 """红利筛选使用同一财年的已实施派息与年报数据。"""
-from datetime import date
-
-import httpx
-
 from app.cycle.live import number
 
 DATA_URL = "https://datacenter-web.eastmoney.com/api/data/v1/get"
@@ -12,45 +8,6 @@ REPORTS = {
     "balance": ("RPT_DMSK_FN_BALANCE", "TOTAL_ASSETS,TOTAL_LIABILITIES,MONETARYFUNDS"),
 }
 QUALITY_ORDER = {"supported": 0, "review": 1, "financial": 2, "unknown": 3, "risk": 4}
-
-
-def annual_statements(client, codes, as_of, config):
-    """按小批次读取候选年报，部分接口失败时保留可验证字段。"""
-    results = {key: {} for key in REPORTS}
-    errors = []
-    year = date.fromisoformat(as_of).year
-    years = range(year - config["dividend_financial_years"] - 1, year)
-    periods = ",".join(f"'{y}-12-31'" for y in years)
-    size = config["dividend_financial_batch_size"]
-    for offset in range(0, len(codes), size):
-        batch = codes[offset:offset + size]
-        securities = ",".join(f'"{code}"' for code in batch)
-        for key, (report, fields) in REPORTS.items():
-            try:
-                response = client.get(DATA_URL, params={
-                    "reportName": report, "columns": f"SECURITY_CODE,REPORT_DATE,NOTICE_DATE,{fields}",
-                    "filter": f"(SECURITY_CODE in ({securities}))(REPORT_DATE in ({periods}))",
-                    "sortColumns": "REPORT_DATE", "sortTypes": "-1",
-                    "pageSize": 500, "source": "WEB", "client": "WEB",
-                })
-                response.raise_for_status()
-                payload = response.json()
-                result = payload.get("result") or {}
-                rows = result.get("data") or []
-                if not payload.get("success") or result.get("count", 0) != len(rows):
-                    raise ValueError("数据源未返回完整批次")
-                for row in rows:
-                    code = row.get("SECURITY_CODE")
-                    period, notice = (row.get("REPORT_DATE") or "")[:10], (row.get("NOTICE_DATE") or "")[:10]
-                    if code not in batch or not period.endswith("-12-31") or not notice or notice > as_of:
-                        continue
-                    lookup = (code, int(period[:4]))
-                    current = results[key].get(lookup)
-                    if not current or notice > current["NOTICE_DATE"][:10]:
-                        results[key][lookup] = row
-            except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError) as exc:
-                errors.append(f"财报 {key} 批次 {batch[0]}：{str(exc)[:100]}")
-    return results, errors
 
 
 def assess_quality(stock, statements, config):

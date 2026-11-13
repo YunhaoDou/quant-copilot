@@ -29,6 +29,25 @@ SIM_UNIVERSE = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA"]
 BENCHMARK_SYMBOL = "SPY"
 BENCHMARK_ACCOUNT = "sim-benchmark-spy"
 
+# 遗留美股模拟账户的中文名（账户名仍是 sim-* 的稳定主键，只用于界面展示）。
+LEGACY_ACCOUNT_LABELS = {
+    "sma_crossover": "美股模拟 · 均线交叉",
+    "rsi_reversion": "美股模拟 · RSI 均值回归",
+    "momentum": "美股模拟 · 时序动量",
+    "bollinger_reversion": "美股模拟 · 布林带回归",
+    "benchmark-spy": "美股模拟 · 标普500买入持有（基准）",
+}
+LEGACY_ACCOUNT_DEMO_LABEL = "演示账户（手动模拟）"
+
+
+def account_label(name: str) -> str:
+    """把遗留模拟/演示账户名翻译成中文；未知账户原样返回，避免猜测。"""
+    if name == "demo":
+        return LEGACY_ACCOUNT_DEMO_LABEL
+    if name.startswith("sim-"):
+        return LEGACY_ACCOUNT_LABELS.get(name[4:], name)
+    return name
+
 
 def account_name(strategy_key: str) -> str:
     return f"sim-{strategy_key}"
@@ -198,6 +217,7 @@ async def sim_report(session: AsyncSession) -> dict:
         total_return = (latest_equity / acct.starting_cash - 1) * 100 if acct.starting_cash else 0.0
         row = {
             "account": acct.name,
+            "label": account_label(acct.name),
             "days_logged": len(curve),
             "starting_cash": round(acct.starting_cash, 2),
             "equity": round(latest_equity, 2),

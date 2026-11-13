@@ -60,7 +60,6 @@
   "dividend_min_market_cap": 2000000000,
   "dividend_min_yield_pct": 3,
   "dividend_min_years": 3,
-  "dividend_max_deep_check": 320,
   "dividend_financial_years": 3,
   "dividend_financial_batch_size": 25,
   "dividend_cash_spike_multiple": 1.5,
@@ -78,7 +77,6 @@
   "dividend_screen_cash_profit_min": 0.8,
   "dividend_history_bars": 250,
   "dividend_min_history_bars": 120,
-  "dividend_per_category": 8,
   "dividend_low_position_pct": 35,
   "dividend_high_position_pct": 70,
   "mock_seed": 42,
@@ -86,5 +84,20 @@
   "research_scan_workers": 8,
   "experiment_start_date": "2026-11-11",
   "experiment_review_date": "2027-05-11",
-  "research_display_limit": 100
+  "all_stock_history_bars": 320,
+  "research_candidate_page_size": 50,
+  "etf_refresh_seconds": 3600,
+  "shibor_history_quotes": 756,
+  "shibor_smoothing_quotes": 5,
+  "shibor_low_percentile": 0.25,
+  "shibor_initial_dividend_pct": 50,
+  "shibor_dividend_code": "512890",
+  "shibor_growth_code": "159915",
+  "shibor_cost_bps": 10,
+  "shibor_slippage_bps": 5,
+  "shibor_min_commission": 5,
+  "shibor_limit_pct": {
+    "512890": 10,
+    "159915": 20
+  }
 }

@@ -69,9 +69,9 @@ class QuantCopilotGateway(BaseGateway):
         with self.lock:self.symbols.add(req.symbol)
 
     def send_order(self,req):
-        self.write_log("委托已拒绝：本接口只读；请在七策略App操作模拟账户。")
+        self.write_log("委托已拒绝：本接口只读；请在八策略App操作模拟账户。")
         return ""
 
     def cancel_order(self,req):self.write_log("撤单已拒绝：本接口没有交易委托。")
-    def query_account(self):self.write_log("七个虚拟账户由七策略App同步；没有券商资金账户。")
-    def query_position(self):self.write_log("请在七策略App分别查看虚拟持仓，不合并为券商持仓。")
+    def query_account(self):self.write_log("八个虚拟账户由八策略App同步；没有券商资金账户。")
+    def query_position(self):self.write_log("请在八策略App分别查看虚拟持仓，不合并为券商持仓。")

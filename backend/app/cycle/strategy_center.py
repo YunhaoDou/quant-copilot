@@ -4,18 +4,19 @@ from datetime import datetime
 import json
 from threading import Lock
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Request
 import numpy as np
 
 from app.cycle.engine import load_config
 from app.cycle.events import database, encode
 from app.cycle.live import TZ, number
-from app.cycle.market import fetch_daily, fetch_quotes
-from app.cycle.strategy_sim import new_account, log, step
+from app.cycle.market import fetch_daily, fetch_quotes, quote_batches
+from app.cycle.strategy_sim import new_account, log, read as read_strategy_sim, step
 
 router = APIRouter(prefix="/strategy-center", tags=["策略研究"])
 _executor = ThreadPoolExecutor(max_workers=1)
 _lock = Lock()
+_account_update_lock=Lock()
 _refresh = {"state": "尚未核验", "updated_at": None, "error": None}
 CATALOG = [
     {"id": "quality-value", "name": "质量价值", "logic": "用持续盈利和现金覆盖筛公司，再约束支付价格。",
@@ -55,8 +56,31 @@ CATALOG.append({"id":"trend-leader-band","name":"主线趋势中军波段",
     "entry":"最接近相对强势趋势，但要求主线、多日梯队、中军地位及缩量回踩确认；不追连板。",
     "exit":"固定5%止损、收盘跌破20日线或退潮信号；REDUCE首版保守退出全部单仓。"})
 
+CATALOG.append({"id":"shibor-rotation","name":"SHIBOR红利成长轮动",
+    "logic":"第八策略：隔夜SHIBOR的5日均值处于过去756报价日低25%分位时偏向成长，否则偏向红利。",
+    "evidence":"固定512890与159915的ETF配置实验；历史研究与前向账本隔离。新账户自实际启动计时，不沿用原七策略起始收益。",
+    "entry":"初始各半；月末冻结可得SHIBOR信号，次月首个交易日收盘模拟调仓。",
+    "exit":"月频切换；20%回撤触发退出与暂停，极端行情无法保证亏损上限。"})
+
+# 历史回测覆盖范围：只有纯价量规则可以诚实回测；依赖历史财务/分红/事件/成分/利率快照的策略
+# 只保留前向模拟，避免用“今天的基本面”回测昨天的价格造成前视偏差。
+BACKTEST_COVERAGE = {
+    "quality-value": {"supported": False, "reason": "依赖历史动态PE/PB与财务快照；系统只保存最新快照，回测会有前视偏差。"},
+    "dividend-cash": {"supported": False, "reason": "依赖历史分红、股息率与财务证据；历史快照未保存。"},
+    "dividend-lowvol": {"supported": False, "reason": "依赖历史分红、波动率与财务证据；历史快照未保存。"},
+    "fundamental-trend": {"supported": False, "reason": "依赖历史年报扣非利润；历史财务快照未保存。"},
+    "relative-trend": {"supported": True, "strategy_key": "relative_trend_ashare",
+                       "reason": "纯价量规则：20日新高 + 20/60均线 + 60日相对宽基超额，可用历史日线回测；共用风控与T+1/涨跌停未还原。"},
+    "leader-rebound": {"supported": False, "reason": "依赖历史板块事件、涨停池与人工阶段证据；历史事件库未回填。"},
+    "trend-leader-band": {"supported": False, "reason": "依赖历史主线、板块梯队与涨停证据；历史成分与事件未回填。"},
+    "shibor-rotation": {"supported": False, "reason": "依赖历史SHIBOR与ETF日线；当前只保存前向账本。"},
+}
+for spec in CATALOG:
+    spec["backtest"] = BACKTEST_COVERAGE[spec["id"]]
+
 
 def schema(db):
+    db.execute("CREATE TABLE IF NOT EXISTS research_candidate_checks (strategy_id TEXT,code TEXT,status TEXT,priority REAL,payload TEXT,PRIMARY KEY(strategy_id,code))")
     db.execute("""CREATE TABLE IF NOT EXISTS research_strategy_accounts (
         strategy_id TEXT PRIMARY KEY, payload TEXT NOT NULL)""")
     db.execute("""CREATE TABLE IF NOT EXISTS research_strategy_signals (
@@ -239,6 +263,12 @@ def enqueue_refresh():
 
 
 def run_accounts():
+    if not _account_update_lock.acquire(blocking=False):return
+    try:return _run_accounts()
+    finally:_account_update_lock.release()
+
+
+def _run_accounts():
     config = load_config()
     with database() as db:
         schema(db)
@@ -248,12 +278,7 @@ def run_accounts():
     symbols = sorted({stock["code"] for _, account, package in packages if account and account["status"] == "running" and package for stock in package["stocks"]})
     if not symbols:
         return
-    quotes = {}
-    for offset in range(0, len(symbols), 100):
-        try:
-            quotes.update({q["code"]: q for q in fetch_quotes(symbols[offset:offset+100])["quotes"]})
-        except Exception:
-            continue
+    quotes,_quote_failures=quote_batches(symbols,config["research_scan_workers"])
     now = datetime.now(TZ)
     for name, account, package in packages:
         if not account or account["status"] != "running" or not package:
@@ -266,6 +291,7 @@ def run_accounts():
         for stock in package["stocks"]:
             quote = quotes.get(stock["code"])
             if not quote or not quote.get("price") or quote["price"] <= 0 or quote["quote_time"][:10] != now.date().isoformat():
+                candidates.append({"code":stock["code"],"name":stock["name"],"quote_time":None,"status":"unknown","priority":0,"checks":[{"label":"当日有效报价缺失，未放行交易","passed":None}]})
                 continue
             age = (now-datetime.fromisoformat(quote["quote_time"])).total_seconds()
             result = evaluate(name, stock, quote, stock["metrics"], package.get("benchmark"), config)
@@ -288,13 +314,17 @@ def run_accounts():
                     "watched": [{"symbol": stock["code"], "quote": quote}],
                 },
             })
+        ordered=sorted(candidates,key=lambda c:(c["status"]!="pass",c["priority"],c["code"]))
+        encoded_candidates=[(name,c["code"],c["status"],c["priority"],encode(c)) for c in ordered]
         with database() as db:
             db.execute("BEGIN IMMEDIATE")
             current = load(db, name)
             if not current or current["status"] != "running":
                 continue
             current["candidate_count"] = len(candidates)
-            current["candidates"] = sorted(candidates,key=lambda c:(c["status"]!="pass",c["priority"],c["code"]))[:config["research_display_limit"]]
+            db.execute("DELETE FROM research_candidate_checks WHERE strategy_id=?",(name,))
+            db.executemany("INSERT INTO research_candidate_checks VALUES(?,?,?,?,?)",encoded_candidates)
+            current["candidates"] = ordered[:config["research_candidate_page_size"]]
             current["data"] = {"scope":package.get("scope","legacy-limited"),**{k: package[k] for k in ("generated_at", "financial_date", "pool_total", "checked", "failures")}}
             previous_trade_count = len(current["trades"])
             entry_scope=(current.get("position") or {}).get("universe_scope","切换全A股之前的原范围")
@@ -311,11 +341,16 @@ def run_accounts():
             persist(db, name, current)
 
 
-@router.get("")
 def catalog():
     with database() as db:
         schema(db)
-        strategies = [{**spec, "account": load(db, spec["id"]) if spec["id"] != "leader-rebound" else None} for spec in CATALOG]
+        # 情绪龙头回补沿用旧情绪周期影子账户（strategy_sim 表），这里只读同一份账本，
+        # 让目录页也能显示运行状态与参考权益；不复制、不新建账户。
+        leader_account = read_strategy_sim(db)
+        strategies = [
+            {**spec, "account": leader_account if spec["id"] == "leader-rebound" else load(db, spec["id"])}
+            for spec in CATALOG
+        ]
     progress = dict(_refresh)
     saved_dates = [(spec.get("account") or {}).get("data", {}).get("generated_at") for spec in strategies]
     if not progress["updated_at"] and not progress.get("running") and any(saved_dates):
@@ -326,11 +361,33 @@ def catalog():
     for spec in strategies:
         if spec["id"] == "trend-leader-band":
             spec["account"] = trend_status()["account"]
+    from app.cycle.shibor_sim import status as shibor_status
+    for spec in strategies:
+        if spec["id"]=="shibor-rotation":spec["account"]=shibor_status()["account"]
     from app.cycle.experiment import setup
     from app.cycle import all_a
-    universe = all_a.saved()
-    return {"experiment":setup(),"market_scan":{**all_a.state,"total":(universe or {}).get("total",0),"evidence_state":(universe or {}).get("evidence_state")},"strategies": strategies, "refresh": progress,
-            "universe": "沪深北完整A股母池；各策略按自身条件筛选，未满足条件或证据缺失保持空仓；当前扫描覆盖率见进度"}
+    from app.cycle import events,read_cache
+    universe,_=read_cache.document(events.DB_PATH,"all_a_universe")
+    etfs,_=read_cache.document(events.DB_PATH,"etf_universe")
+    return {"etf_scan":{"total":(etfs or {}).get("total",0),"updated_at":(etfs or {}).get("updated_at")},"experiment":setup(),"market_scan":{**all_a.state,"total":(universe or {}).get("total",0),"evidence_state":(universe or {}).get("evidence_state")},"strategies": strategies, "refresh": progress,
+            "universe": "完整沪深北A股及沪深上市ETF分别追踪；股票策略保留股票母池，SHIBOR策略按冻结规则使用两只ETF，资金独立"}
+
+
+@router.get("/{strategy_id}/candidates")
+def candidate_page(strategy_id: str, page: int=Query(1,ge=1), page_size: int=Query(50,ge=1,le=200), status: str="all", query: str=Query("",max_length=80)):
+    if strategy_id not in {spec["id"] for spec in RESEARCH_CATALOG}:
+        raise HTTPException(404,"此策略使用独立事件核验页面")
+    if status not in ("all","pass","fail","unknown"):raise HTTPException(422,"未知筛选状态")
+    clauses=["strategy_id=?"];args=[strategy_id]
+    if status!="all":clauses.append("status=?");args.append(status)
+    if query:
+        clauses.append("(code LIKE ? OR json_extract(payload,'$.name') LIKE ?)");args.extend(["%"+query+"%"]*2)
+    where=" AND ".join(clauses)
+    with database() as db:
+        schema(db)
+        total=db.execute("SELECT count(*) FROM research_candidate_checks WHERE "+where,args).fetchone()[0]
+        rows=db.execute("SELECT payload FROM research_candidate_checks WHERE "+where+" ORDER BY CASE status WHEN 'pass' THEN 0 ELSE 1 END,priority,code LIMIT ? OFFSET ?",[*args,page_size,(page-1)*page_size]).fetchall()
+    return {"rows":[json.loads(row[0]) for row in rows],"total":total,"page":page,"page_size":page_size,"scope":"all-a"}
 
 
 @router.post("/start-all")
@@ -349,6 +406,9 @@ def start_all():
     start()
     from app.cycle.trend_forward import control as trend_control
     trend_control("start")
+    from app.cycle.shibor_sim import control as shibor_control
+    from app.cycle.shibor_sim import status as shibor_status
+    if not (shibor_status().get("account") or {}).get("risk_exit"):shibor_control("start")
     enqueue_refresh()
     return catalog()
 
@@ -361,6 +421,9 @@ def refresh():
 
 @router.post("/{strategy_id}/{action}")
 def control(strategy_id: str, action: str):
+    if strategy_id=="shibor-rotation":
+        from app.cycle.shibor_sim import control as shibor_control
+        return shibor_control(action)
     if strategy_id not in {spec["id"] for spec in RESEARCH_CATALOG} or action not in ("start", "pause", "exit"):
         raise HTTPException(404, "策略或动作不存在")
     with database() as db:
@@ -379,3 +442,9 @@ def control(strategy_id: str, action: str):
     if action == "start":
         enqueue_refresh()
     return {"account": account}
+
+
+@router.get("")
+def catalog_http(request:Request):
+    from app.cycle.read_cache import response
+    return response(catalog(),request)

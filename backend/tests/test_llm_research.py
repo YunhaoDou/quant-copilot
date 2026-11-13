@@ -1,14 +1,16 @@
 """Verifies schema validation + auto-retry + Redis caching without calling the real
 Anthropic API (no key is available in this environment). A FakeLLMClient stands in for
 the network call so the orchestration logic — the actual thing this bullet claims — is
-what's under test.
+what's under test. The shared structured_completion helper (also used by news_sentiment
+and compliance_qa) gets its own contract tests here.
 """
 import json
 
 import fakeredis.aioredis
 import pytest
+from pydantic import BaseModel, Field
 
-from app.services.llm_research import MAX_RETRIES, get_research_note
+from app.services.llm_research import MAX_RETRIES, get_research_note, structured_completion
 
 pytestmark = pytest.mark.asyncio
 
@@ -37,6 +39,83 @@ class FakeLLMClient:
 @pytest.fixture
 def redis():
     return fakeredis.aioredis.FakeRedis(decode_responses=True)
+
+
+# ---- shared structured_completion helper contract (used by llm_research/news/compliance) ----
+
+class TinySchema(BaseModel):
+    answer: str = Field(min_length=3)
+
+
+class RecordingFakeLLMClient(FakeLLMClient):
+    def __init__(self, responses: list[str]):
+        super().__init__(responses)
+        self.prompts: list[str] = []
+
+    def complete(self, prompt: str, system_prompt: str | None = None):
+        self.prompts.append(prompt)
+        return super().complete(prompt, system_prompt)
+
+
+async def test_structured_completion_retries_with_caller_repair_prompt_then_caches(redis):
+    client = RecordingFakeLLMClient(['{"answer": ""}', json.dumps({"answer": "fixed"})])
+
+    result = await structured_completion(
+        redis,
+        client,
+        TinySchema,
+        "initial prompt",
+        cache_key="toy:1",
+        cache_ttl_hours=1,
+        system_prompt="toy system prompt",
+        repair_prompt=lambda exc: f"repair:{exc}",
+        payload_from_model=lambda validated: {"answer": validated.answer},
+        error_message="toy helper failed",
+    )
+
+    assert client.calls == 2
+    assert client.prompts[0] == "initial prompt"
+    assert client.prompts[1].startswith("repair:")
+    assert result.cache_hit is False and result.retries == 1
+    assert result.payload == {"answer": "fixed", "cache_hit": False}
+    # The caller-shaped payload (not the validated model) is what lands in Redis.
+    assert json.loads(await redis.get("toy:1")) == {"answer": "fixed"}
+
+    exhausted = RecordingFakeLLMClient([])
+    cached = await structured_completion(
+        redis,
+        exhausted,
+        TinySchema,
+        "initial prompt",
+        cache_key="toy:1",
+        cache_ttl_hours=1,
+        system_prompt="toy system prompt",
+        repair_prompt=lambda exc: f"repair:{exc}",
+        payload_from_model=lambda validated: {"answer": validated.answer},
+        error_message="toy helper failed",
+        cache_hit_fields={"retries": 0},
+    )
+    assert exhausted.calls == 0
+    assert cached.cache_hit is True and cached.retries == 0
+    assert cached.payload == {"answer": "fixed", "cache_hit": True, "retries": 0}
+
+
+async def test_structured_completion_raises_callers_error_message_after_retries(redis):
+    client = RecordingFakeLLMClient(["still not json"] * (MAX_RETRIES + 1))
+    with pytest.raises(ValueError, match="toy helper failed after 2 retries"):
+        await structured_completion(
+            redis,
+            client,
+            TinySchema,
+            "initial prompt",
+            cache_key="toy:2",
+            cache_ttl_hours=1,
+            system_prompt="toy system prompt",
+            repair_prompt=lambda exc: f"repair:{exc}",
+            payload_from_model=lambda validated: {"answer": validated.answer},
+            error_message="toy helper failed",
+        )
+    assert client.calls == MAX_RETRIES + 1
 
 
 async def test_valid_response_on_first_try(redis):

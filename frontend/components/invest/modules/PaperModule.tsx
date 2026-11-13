@@ -130,10 +130,13 @@ export default function PaperModule() {
             {accounts.length === 0 && <option value="">{t("paper.noAccounts")}</option>}
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.name} ({money(a.cash_balance)} cash)
+                {a.label && a.label !== a.name ? `${a.label}（${a.name}）` : a.name} ({money(a.cash_balance)} cash)
               </option>
             ))}
           </select>
+          <span className="mt-1 block max-w-72 text-[11px] leading-5 text-slate-500">
+            演示账户与 sim-* 为遗留美股模拟（4 个旧模板 + 标普500基准）；其净值与收益可在「交易与模拟 → 策略研究」只读查看。
+          </span>
         </label>
 
         <div className="flex gap-2 items-end">

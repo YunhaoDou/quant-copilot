@@ -1,17 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { api, type ResearchNote } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import LiveQuotes from "../live-quotes";
 
-export default function AiResearchModule() {
+export default function AiResearchModule({initialSymbol}:{initialSymbol?:string}) {
   const { locale, t } = useLocale();
-  const [symbol, setSymbol] = useState("600519.SS");
+  const [symbol, setSymbol] = useState(initialSymbol||"600519.SS");
   const [note, setNote] = useState<ResearchNote | null>(null);
   const [status, setStatus] = useState("");
 
+  useEffect(()=>{if(initialSymbol){setSymbol(initialSymbol);setNote(null);setStatus("");}},[initialSymbol]);
   async function fetchNote() {
     setStatus(t("research.asking"));
     setNote(null);

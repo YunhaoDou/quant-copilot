@@ -1,28 +1,53 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-import { INVESTMENT_VIEW_EVENT, INVESTMENT_VIEWS, InvestmentView, navigateInvestmentView, readInvestmentView } from "@/lib/invest-navigation";
-
-import DashboardPanel from "./DashboardPanel";
 import dynamic from "next/dynamic";
-const CyclePanel = dynamic(() => import("./cycle-panel"), { loading: () => <div>正在载入情绪周期…</div> });
-const DividendPanel = dynamic(() => import("./dividend-panel"), { loading: () => <div>正在载入红利看板…</div> });
-import FunctionCenterPanel from "./FunctionCenterPanel";
-import GuidePanel from "./GuidePanel";
-import JournalPanel from "./JournalPanel";
-import MarketRadarPanel from "./MarketRadarPanel";
-import ResearchPanel from "./ResearchPanel";
-import ToolsPanel from "./ToolsPanel";
+
+import {
+  INVESTMENT_VIEW_EVENT,
+  INVESTMENT_VIEWS,
+  type InvestmentView,
+  type ViewTarget,
+  canonicalizeSearch,
+  navigateInvestmentView,
+  resolveRoute,
+} from "@/lib/invest-navigation";
+
+import LiveQuotes from "./live-quotes";
+import WorkspaceTabs from "./WorkspaceTabs";
 import { usePersonalInvestment } from "./usePersonalInvestment";
-import WatchlistPanel from "./WatchlistPanel";
 import { fetchCompanyInfo } from "@/lib/company-data";
 import { upsertCompany } from "@/lib/company-store";
-import LiveQuotes from "./live-quotes";
-import StrategyCenterPanel from "./StrategyCenterPanel";
+import { Card } from "./ui";
+
+const loading = () => (
+  <Card>
+    <p className="py-10 text-center text-sm text-slate-400">正在载入…</p>
+  </Card>
+);
+const DashboardPanel = dynamic(() => import("./DashboardPanel"), { loading });
+const GuidePanel = dynamic(() => import("./GuidePanel"), { loading });
+const JournalPanel = dynamic(() => import("./JournalPanel"), { loading });
+const MarketRadarPanel = dynamic(() => import("./MarketRadarPanel"), { loading });
+const ResearchPanel = dynamic(() => import("./ResearchPanel"), { loading });
+const StrategyCenterPanel = dynamic(() => import("./StrategyCenterPanel"), { loading });
+const ToolsPanel = dynamic(() => import("./ToolsPanel"), { loading });
+const WatchlistPanel = dynamic(() => import("./WatchlistPanel"), { loading });
+const CyclePanel = dynamic(() => import("./cycle-panel"), { loading });
+const DividendPanel = dynamic(() => import("./dividend-panel"), { loading });
+const TickerModule = dynamic(() => import("./modules/TickerModule"), { loading });
+const ScreeningModule = dynamic(() => import("./modules/ScreeningModule"), { loading });
+const FundModule = dynamic(() => import("./modules/FundModule"), { loading });
+const BacktestModule = dynamic(() => import("./modules/BacktestModule"), { loading });
+const PaperModule = dynamic(() => import("./modules/PaperModule"), { loading });
+const ComplianceModule = dynamic(() => import("./modules/ComplianceModule"), { loading });
+const SettingsModule = dynamic(() => import("./modules/SettingsModule"), { loading });
+const ResearchLabModule = dynamic(() => import("./modules/ResearchLabModule"), { loading });
 
 export default function PersonalInvestmentSystem() {
-  const [tab, setTab] = useState<InvestmentView>("dashboard");
+  const [routeReady,setRouteReady] = useState(false);
+  const [view, setView] = useState<InvestmentView>("decision");
+  const [subTab, setSubTab] = useState<string>("dashboard");
   const [embedded, setEmbedded] = useState(false);
   const [guideLesson, setGuideLesson] = useState<string | null>(null);
   const [strategyId, setStrategyId] = useState<string | null>(null);
@@ -32,11 +57,23 @@ export default function PersonalInvestmentSystem() {
   useEffect(() => {
     const sync = () => {
       const params = new URLSearchParams(window.location.search);
-      setTab(readInvestmentView());
+      const resolved = resolveRoute(params);
+      setView(resolved.view);
+      setRouteReady(true);
+      setSubTab(resolved.tab);
       setEmbedded(params.get("embed") === "1");
       setGuideLesson(params.get("lesson"));
       setStrategyId(params.get("strategy"));
       setGuidePage(params.get("page") ?? (window.location.hash.slice(1) || null));
+      // 旧链接（view=dashboard / functions&tool=... 等）在地址栏就地规范化为 view + tab，不新增历史记录。
+      const canonical = canonicalizeSearch(params);
+      if (canonical.toString() !== params.toString()) {
+        const url = new URL(window.location.href);
+        url.search = canonical.toString();
+        window.history.replaceState({ view: resolved.view }, "", url);
+        // 让已挂载的子页签（WorkspaceTabs）重新读取规范化后的 tab 参数
+        window.dispatchEvent(new CustomEvent(INVESTMENT_VIEW_EVENT, { detail: resolved.view }));
+      }
     };
     sync();
     window.addEventListener("popstate", sync);
@@ -47,16 +84,25 @@ export default function PersonalInvestmentSystem() {
     };
   }, []);
 
-  function selectTab(view: InvestmentView) {
-    setTab(view);
-    navigateInvestmentView(view);
+  function selectView(target: ViewTarget, tab?: string) {
+    navigateInvestmentView(target, undefined, tab ? { tab } : {});
+    window.scrollTo(0, 0);
   }
 
-  if (!ready) {
+  if (!ready || !routeReady) {
     return <div className="mx-auto max-w-7xl px-6 py-16 text-sm text-slate-500">正在载入个人投资系统…</div>;
   }
 
-  if (embedded && tab === "dividends") return <main className="bg-[#f4f6f2] p-4"><style>{"body { padding: 0 !important; }"}</style><DividendPanel state={state} setState={setState} /></main>;
+  if (embedded && view === "research" && subTab === "dividends") {
+    return (
+      <main className="bg-[#f4f6f2] p-4">
+        <style>{"body { padding: 0 !important; }"}</style>
+        <DividendPanel state={state} setState={setState} />
+      </main>
+    );
+  }
+
+  const showLiveQuotes = view !== "market" && view !== "help";
 
   return (
     <main className="min-h-screen bg-[#f4f6f2] text-slate-800">
@@ -92,8 +138,8 @@ export default function PersonalInvestmentSystem() {
           {INVESTMENT_VIEWS.map((item) => (
             <button
               key={item.id}
-              onClick={() => selectTab(item.id)}
-              className={`min-w-max flex-1 rounded-xl px-4 py-2.5 text-left transition duration-200 sm:min-w-[150px] ${tab === item.id ? "bg-[#173f2c] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+              onClick={() => selectView(item.id)}
+              className={`min-w-max flex-1 rounded-xl px-4 py-2.5 text-left transition duration-200 sm:min-w-[150px] ${view === item.id ? "bg-[#173f2c] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
             >
               <div className="text-sm font-semibold">{item.shortLabel}</div>
             </button>
@@ -101,22 +147,75 @@ export default function PersonalInvestmentSystem() {
         </nav>
 
         <div className="mt-5">
-          {tab !== "cycle" && tab !== "market" && tab !== "guide" && <div className="mb-5"><LiveQuotes /></div>}
-          {tab === "guide" && <GuidePanel lesson={guideLesson} page={guidePage} onNavigate={(view) => { selectTab(view); window.scrollTo(0, 0); }} />}
-          {tab === "dashboard" && <DashboardPanel state={state} setState={setState} />}
-          {tab === "market" && <MarketRadarPanel state={state} setState={setState} />}
-          {tab === "cycle" && <CyclePanel onResearch={async (code) => {
-            const info = await fetchCompanyInfo(code);
-            setState(current => upsertCompany(upsertCompany(current, info, "watch", "情绪周期"), info, "research"));
-            navigateInvestmentView("research", code);
-          }} />}
-          {tab === "dividends" && <DividendPanel state={state} setState={setState} />}
-          {tab === "watchlist" && <WatchlistPanel state={state} setState={setState} />}
-          {tab === "research" && <ResearchPanel state={state} setState={setState} />}
-          {tab === "tools" && <ToolsPanel profile={state.profile} />}
-          {tab === "journal" && <JournalPanel state={state} setState={setState} />}
-          {tab === "strategies" && <StrategyCenterPanel strategyId={strategyId} />}
-          {tab === "functions" && <FunctionCenterPanel />}
+          {showLiveQuotes && <div className="mb-5"><LiveQuotes /></div>}
+
+          {view === "decision" && (
+            <WorkspaceTabs label="决策台" param="tab" tabs={[
+              { id: "dashboard", label: "驾驶舱", content: <DashboardPanel state={state} setState={setState} /> },
+              { id: "journal", label: "决策复盘", content: <JournalPanel state={state} setState={setState} /> },
+            ]} />
+          )}
+
+          {view === "market" && (
+            <WorkspaceTabs label="市场" param="tab" tabs={[
+              { id: "radar", label: "市场雷达", content: <MarketRadarPanel state={state} setState={setState} /> },
+              {
+                id: "cycle",
+                label: "情绪周期",
+                content: (
+                  <CyclePanel onResearch={async (code) => {
+                    const info = await fetchCompanyInfo(code);
+                    setState(current => upsertCompany(upsertCompany(current, info, "watch", "情绪周期"), info, "research"));
+                    navigateInvestmentView("research", code);
+                  }} />
+                ),
+              },
+            ]} />
+          )}
+
+          {view === "research" && (
+            <WorkspaceTabs label="研究" param="tab" tabs={[
+              { id: "dividends", label: "红利扫描", content: <DividendPanel state={state} setState={setState} /> },
+              { id: "watchlist", label: "观察池", content: <WatchlistPanel state={state} setState={setState} /> },
+              { id: "research", label: "个股研究", content: <ResearchPanel state={state} setState={setState} /> },
+            ]} />
+          )}
+
+          {view === "trade" && (
+            <WorkspaceTabs label="交易与模拟" param="tab" tabs={[
+              { id: "strategies", label: "策略研究", content: <StrategyCenterPanel strategyId={strategyId} /> },
+              { id: "tools", label: "模拟工具", content: <ToolsPanel profile={state.profile} /> },
+              { id: "backtest", label: "历史回测", content: <BacktestModule /> },
+              { id: "paper", label: "手动模拟", content: <PaperModule /> },
+              { id: "archive", label: "分析档案", content: <ResearchLabModule section="分析档案" /> },
+            ]} />
+          )}
+
+          {view === "data" && (
+            <WorkspaceTabs label="数据与工具" param="tab" tabs={[
+              { id: "ticker", label: "股票与ETF行情", content: <TickerModule /> },
+              { id: "screening", label: "多因子选股", content: <ScreeningModule /> },
+              { id: "fund", label: "基金与ETF", content: <FundModule /> },
+            ]} />
+          )}
+
+          {view === "help" && (
+            <WorkspaceTabs label="指南与设置" param="tab" tabs={[
+              {
+                id: "guide",
+                label: "新手指南",
+                content: (
+                  <GuidePanel
+                    lesson={guideLesson}
+                    page={guidePage}
+                    onNavigate={(target, tab) => selectView(target, tab)}
+                  />
+                ),
+              },
+              { id: "settings", label: "系统设置", content: <SettingsModule /> },
+              { id: "compliance", label: "旧合规问答", content: <ComplianceModule /> },
+            ]} />
+          )}
         </div>
 
         <footer className="flex flex-wrap items-center justify-between gap-2 py-8 text-xs text-slate-500"><span>A股个人研究 · 个人档案保存在当前浏览器</span><span>仅用于研究与风险管理，不构成投资建议</span></footer>

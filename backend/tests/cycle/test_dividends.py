@@ -1,12 +1,12 @@
 """红利迁移规则的边界与真实分页完整性测试。"""
-from datetime import date, timedelta
+from datetime import date
 
 import httpx
 import pytest
 
-from app.cycle.dividends import build_dividends, classify, paginate
+from app.cycle.dividends import build_dividends, classify
 from app.cycle.dividend_benchmark import fetch_benchmark, parse_benchmark
-from app.cycle.dividend_quality import annual_statements, assess_quality, quality_order, screen_candidate
+from app.cycle.dividend_quality import assess_quality, quality_order, screen_candidate
 from app.cycle.engine import load_config
 
 
@@ -31,19 +31,6 @@ def test_dividend_year_gap_and_share_change():
 def test_classification():
     assert classify("股份制银行") == "金融"
     assert classify("煤炭开采") == "能源资源"
-
-
-def test_paginated_market_accepts_dict_and_rejects_incomplete():
-    cfg={**load_config(),"dividend_workers":1}
-    def respond(request):
-        page=int(request.url.params["pn"])
-        return httpx.Response(200,json={"data":{"total":3,"diff":{"0":{"f12":"a"},"1":{"f12":"b"}} if page == 1 else {"0":{"f12":"c"}}}})
-    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
-        rows=paginate(client,"https://example.test",{},"pn",2,cfg,"market")
-        assert len(rows)==3
-    with httpx.Client(transport=httpx.MockTransport(lambda r:httpx.Response(200,json={"data":{"total":3,"diff":[]}}))) as client:
-        with pytest.raises(ValueError,match="分页未完整"):
-            paginate(client,"https://example.test",{},"pn",2,cfg,"market")
 
 
 def test_historical_median_and_fiscal_payout_use_separate_years():
@@ -92,21 +79,6 @@ def test_quality_separates_cash_backed_risky_missing_and_financial():
     assert financial["fcfCover"] is None and financial["debtPct"] is None
     spiked = assess_quality({**stock, "cashPerShare": 4}, statements(), config)
     assert spiked["status"] == "review" and spiked["flags"]
-
-
-def test_financial_batches_never_read_after_as_of_and_flag_partial_response():
-    def respond(request):
-        name = request.url.params["reportName"]
-        rows = [
-            {"SECURITY_CODE": "600001", "REPORT_DATE": "2025-12-31", "NOTICE_DATE": "2026-04-18"},
-            {"SECURITY_CODE": "600001", "REPORT_DATE": "2024-12-31", "NOTICE_DATE": "2025-04-18"},
-        ]
-        return httpx.Response(200, json={"success": True, "result": {"count": 3 if name.endswith("BALANCE") else 2, "data": rows}})
-    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
-        data, errors = annual_statements(client, ["600001"], "2026-04-17", load_config())
-    assert set(data["income"]) == {("600001", 2024)}
-    assert data["balance"] == {}
-    assert len(errors) == 1
 
 
 def test_bond_curve_uses_published_prior_date_and_rejects_changed_layout():

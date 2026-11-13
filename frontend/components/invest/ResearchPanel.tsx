@@ -9,12 +9,25 @@ import { buttonClass, Card, Empty, Field, inputClass, secondaryButtonClass } fro
 import CompanyCodeEntry from "./CompanyCodeEntry";
 import CompanyFacts from "./CompanyFacts";
 import CompanyKline from "./CompanyKline";
+import WorkspaceTabs from "./WorkspaceTabs";
+import ResearchLabModule from "./modules/ResearchLabModule";
+import AiResearchModule from "./modules/AiResearchModule";
 import CompanyArchiveNotice from "./CompanyArchiveNotice";
 type Props={state:PersonalInvestmentState;setState:Dispatch<SetStateAction<PersonalInvestmentState>>};
 
 export default function ResearchPanel({state,setState}:Props){
- const list=Object.values(state.companies||{}).filter(c=>c.research.opened),[selected,setSelected]=useState<string|null>(null),[message,setMessage]=useState(""),[range,setRange]=useState({low:"",high:""}),[rangeError,setRangeError]=useState("");
+ const [code,setCode]=useState<string|undefined>();
+ useEffect(()=>{const sync=()=>{const company=new URLSearchParams(window.location.search).get("company");if(company)setCode(company);};sync();window.addEventListener(INVESTMENT_VIEW_EVENT,sync);window.addEventListener("popstate",sync);return()=>{window.removeEventListener(INVESTMENT_VIEW_EVENT,sync);window.removeEventListener("popstate",sync);};},[]);
+ useEffect(()=>{setCode(previous=>previous||Object.values(state.companies||{}).find(c=>c.research.opened)?.code);},[state.companies]);
+ function selectCompany(value:string){setCode(value);const url=new URL(window.location.href);url.searchParams.set("company",value);window.history.replaceState({},"",url);}
+
+ return <WorkspaceTabs label="个股研究功能" tabs={[{id:"thesis",label:"公司论证",content:<CompanyResearchEditor state={state} setState={setState} companyCode={code} onCompany={selectCompany}/>},{id:"diagnosis",label:"技术诊断与追问",content:<ResearchLabModule section="股票诊断" initialCode={code}/>},{id:"ai-note",label:"AI结构化笔记",content:<AiResearchModule initialSymbol={code}/>}]} />;
+}
+
+function CompanyResearchEditor({state,setState,onCompany,companyCode}:Props&{onCompany:(code:string)=>void;companyCode?:string}){
+ const list=Object.values(state.companies||{}).filter(c=>c.research.opened),[selected,setSelected]=useState<string|null>(companyCode||null),[message,setMessage]=useState(""),[range,setRange]=useState({low:"",high:""}),[rangeError,setRangeError]=useState("");
  const c=(selected?state.companies?.[selected]:null)||list[0];
+ useEffect(()=>{if(c)onCompany(c.code);},[c?.code]);
  const errors=useCompanyProfiles(c?[c.code]:[],setState);
  useEffect(()=>{function sync(){const code=new URLSearchParams(window.location.search).get("company");if(code){setSelected(code);setState(s=>openCompanyResearch(s,code));}}sync();window.addEventListener(INVESTMENT_VIEW_EVENT,sync);window.addEventListener("popstate",sync);return()=>{window.removeEventListener(INVESTMENT_VIEW_EVENT,sync);window.removeEventListener("popstate",sync);};},[]);
  useEffect(()=>{setRange({low:c?.research.targetLow?.toString()||"",high:c?.research.targetHigh?.toString()||""});setRangeError("");},[c?.code,c?.research.targetLow,c?.research.targetHigh]);

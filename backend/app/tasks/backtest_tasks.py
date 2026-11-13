@@ -26,8 +26,19 @@ async def _run_comparison(symbol: str, start: str | None = None, end: str | None
     try:
         async with session_factory() as session:
             close = await data_ingestion.load_price_series(session, symbol)
+            if close.empty and (symbol.isdigit() or symbol.upper().endswith((".SS",".SH",".SZ",".BJ"))):
+                from app.cycle.all_a import saved
+                from app.cycle.market import normalize_symbol
+                code=normalize_symbol(symbol)[2:]
+                stock=next((s for s in (saved() or {}).get("stocks",[]) if s["code"]==code),None)
+                if not stock:
+                    from app.cycle.etf_universe import saved as etf_saved
+                    stock=next((s for s in (etf_saved() or {}).get("rows",[]) if s["code"]==code),None)
+                if stock:
+                    await data_ingestion.ingest_ticker(session,symbol,stock["name"],market="CN")
+                    close=await data_ingestion.load_price_series(session,symbol)
             if close.empty:
-                raise ValueError(f"no price data ingested for {symbol} yet")
+                raise ValueError(f"no verified price history available for {symbol}")
             if start:
                 close = close[close.index >= start]
             if end:

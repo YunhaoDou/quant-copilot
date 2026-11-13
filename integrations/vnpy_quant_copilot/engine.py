@@ -15,7 +15,7 @@ class QuantCopilotEngine(BaseEngine):
     def __init__(self,main_engine,event_engine):
         super().__init__(main_engine,event_engine,APP_NAME)
         self.client=LocalClient();self.commands=Queue();self.stop=StopEvent();self.snapshot=None;self.account_states={}
-        self.thread=Thread(target=self.run,daemon=True,name="QC-seven-strategies");self.thread.start()
+        self.thread=Thread(target=self.run,daemon=True,name="QC-strategies");self.thread.start()
 
     def command(self,strategy=None,action=None):
         self.commands.put((strategy,action))

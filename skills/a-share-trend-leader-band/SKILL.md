@@ -207,7 +207,7 @@ python3 scripts/evaluate.py --input examples/input_hold_exit.json       # EXIT�
 
 ## 第七策略：独立前向模拟
 
-页面：`/invest?view=strategies&strategy=trend-leader-band`。
+页面：`/invest?view=trade&tab=strategies&strategy=trend-leader-band`。
 与相对强势趋势最接近，区别是先核验主线和中军，再等待缩量回踩与次日确认；
 与情绪龙头回补不同，不按固定第3/4/5天交易，不抢连板，也不沿用旧策略的固定15%止盈。
 

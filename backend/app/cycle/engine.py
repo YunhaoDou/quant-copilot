@@ -1,5 +1,7 @@
 """按可用时间计算收盘信号；事件研究与现金约束交易模拟分开。"""
 import json
+import copy
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -8,13 +10,20 @@ import pandas as pd
 CONFIG_PATH = Path(__file__).with_name("config.yaml")
 
 
-def load_config():
+@lru_cache(maxsize=4)
+def _validated_config(path,mtime,size):
     # JSON 是 YAML 1.2 子集，避免为现有项目增加解析依赖。
-    config = json.loads(CONFIG_PATH.read_text())
+    config = json.loads(Path(path).read_text())
     if not isinstance(config["event_poll_seconds"], int) or not 10 <= config["event_poll_seconds"] <= 3600:
         raise ValueError("事件采集间隔需为10至3600秒")
     if not isinstance(config["research_scan_workers"],int) or not 1 <= config["research_scan_workers"] <= 16:
         raise ValueError("全A股扫描并发需为1至16")
+    if not isinstance(config["all_stock_history_bars"],int) or not 30 <= config["all_stock_history_bars"] <= 640:
+        raise ValueError("全A股历史窗口需为30至640根日线")
+    if not 60<=config["etf_refresh_seconds"]<=86400 or not 0<config["shibor_low_percentile"]<1 or not 1<=config["shibor_smoothing_quotes"]<config["shibor_history_quotes"]:
+        raise ValueError("ETF刷新或SHIBOR规则配置不合法")
+    if any(config[k]<0 for k in ("shibor_cost_bps","shibor_slippage_bps","shibor_min_commission")) or not 0<=config["shibor_initial_dividend_pct"]<=100:
+        raise ValueError("SHIBOR模拟成本或初始配置不合法")
     positive = ["market_new_low_lookback_days", "intraday_stop_fall_bars", "intraday_bar_minutes", "sector_start_limit_up_count", "mock_days", "lot_size", "initial_capital"]
     if any(not isinstance(config[k], int) or config[k] <= 0 for k in positive):
         raise ValueError("窗口、样本数、手数与本金必须为正整数")
@@ -25,6 +34,11 @@ def load_config():
     if not config["backtest_forward_days"] or any(not isinstance(n, int) or n < 1 for n in config["backtest_forward_days"]):
         raise ValueError("持有期限必须为正整数")
     return config
+
+
+def load_config():
+    stat=CONFIG_PATH.stat()
+    return copy.deepcopy(_validated_config(str(CONFIG_PATH),stat.st_mtime_ns,stat.st_size))
 
 
 def snapshots(frame, as_of, config):

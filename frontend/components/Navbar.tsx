@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { INVESTMENT_VIEW_EVENT, INVESTMENT_VIEWS, InvestmentView, navigateInvestmentView, readInvestmentView } from "@/lib/invest-navigation";
+import { INVESTMENT_VIEW_EVENT, INVESTMENT_VIEWS, type InvestmentView, navigateInvestmentView, readInvestmentView } from "@/lib/invest-navigation";
 import { useLocale } from "@/lib/i18n";
 
 export default function Navbar() {
-  const [active, setActive] = useState<InvestmentView>("dashboard");
+  const [active, setActive] = useState<InvestmentView>("decision");
   const [embedded, setEmbedded] = useState(false);
   const { locale, setLocale } = useLocale();
 
@@ -29,7 +29,7 @@ export default function Navbar() {
   return (
     <>
       <header className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-xl lg:hidden">
-        <Link href="/invest?view=dashboard" className="flex items-center gap-2.5 text-slate-950">
+        <Link href="/invest?view=decision" className="flex items-center gap-2.5 text-slate-950">
           <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#173f2c] text-sm font-semibold text-white">Q</span>
           <span><strong className="block text-sm leading-4">A股投资系统</strong><small className="text-[11px] text-slate-400">{activeItem.label}</small></span>
         </Link>
@@ -37,13 +37,13 @@ export default function Navbar() {
       </header>
 
       <aside className="fixed inset-y-0 left-0 z-50 hidden w-60 flex-col border-r border-slate-200/80 bg-[#fbfcfa] lg:flex">
-        <Link href="/invest?view=dashboard" className="flex h-20 shrink-0 items-center gap-3 border-b border-slate-100 px-5">
+        <Link href="/invest?view=decision" className="flex h-20 shrink-0 items-center gap-3 border-b border-slate-100 px-5">
           <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#173f2c] text-base font-semibold text-white shadow-sm">Q</span>
           <span><strong className="block text-[15px] tracking-tight text-slate-950">A股投资系统</strong><small className="text-[11px] text-slate-400">Personal Investment OS</small></span>
         </Link>
 
         <nav className="flex-1 overflow-y-auto px-3 py-5">
-          {(["决策", "工具"] as const).map((group) => (
+          {(["工作流", "工具"] as const).map((group) => (
             <div key={group} className="mb-5">
               <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{group}</p>
               <div className="space-y-1">

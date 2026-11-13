@@ -7,6 +7,7 @@ from app.db.session import get_session
 from app.models import PaperAccount
 from app.schemas.paper import AccountCreate, OrderCreate
 from app.services import paper_trading
+from app.services.sim import account_label
 from app.services.paper_trading import OrderError
 
 router = APIRouter(prefix="/paper", tags=["paper-trading"])
@@ -40,7 +41,13 @@ async def create_account(body: AccountCreate, session: AsyncSession = Depends(ge
 async def list_accounts(session: AsyncSession = Depends(get_session)):
     result = await session.execute(select(PaperAccount).order_by(PaperAccount.id))
     return [
-        {"id": a.id, "name": a.name, "starting_cash": a.starting_cash, "cash_balance": a.cash_balance}
+        {
+            "id": a.id,
+            "name": a.name,
+            "label": account_label(a.name),
+            "starting_cash": a.starting_cash,
+            "cash_balance": a.cash_balance,
+        }
         for a in result.scalars()
     ]
 

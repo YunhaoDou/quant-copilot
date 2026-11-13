@@ -18,6 +18,7 @@ node_modules/
 dist/
 build/
 *.log
+*.tsbuildinfo
 .pnpm-store/
 
 # Env
@@ -45,3 +46,9 @@ generated/
 
 # Docker / volumes
 docker-data/
+
+# Isolated verified frontend releases and runtime metadata
+frontend/.next*/
+backend/logs/frontend-release.json
+backend/logs/frontend-release.json.tmp
+backend/logs/frontend.pid

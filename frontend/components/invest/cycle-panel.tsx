@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, Metric, Field, inputClass, buttonClass, money } from "./ui";
-import CycleStrategySimulation from "./CycleStrategySimulation";
+import { navigateInvestmentView } from "@/lib/invest-navigation";
 import CycleEventsPanel from "./CycleEventsPanel";
 import { marketApiUrl } from "@/lib/live-market";
 
@@ -12,7 +12,7 @@ type Snapshot = { date: string; observed_at?: string; state: string; market_clos
 type Metadata = { provider: string; fetched_at: string; quote_time: string | null; quote_age_seconds: number | null; replay?: boolean; refresh_seconds: number; stale: boolean; session: string; warnings: string[]; feeds: Record<string, { status: string; count?: number; error?: string; provider_time?: string | null }>; indices: {symbol: string;name: string;price: number;pct: number;timestamp: string}[] };
 type Result = { source: string; simulated: boolean; metadata?: Metadata; dates: string[]; config: Record<string, string | number | number[]>; history: Snapshot[]; current: Snapshot | null; intraday: { time: string; symbol: string; name: string; price: number }[]; backtest: { events: { date: string; symbol: string; sector: string; state: string; returns: Record<string, number | null> }[]; summary: { samples: number; signals: number; win_rate: number | null; mean: number | null; median: number | null }; simulation: { trades: { symbol: string; status: string; entry_date?: string; exit_date?: string; pnl?: number }[]; curve: { date: string; equity: number }[]; max_drawdown: number | null; final_equity: number | null } } };
 type Review = { date: string; auto: string; state: string; reason: string; time: string };
-const tabs = ["今日作战", "分时监控", "周期复盘", "回测验证", "设置与说明", "事件跟踪", "策略模拟"];
+const tabs = ["今日作战", "分时监控", "周期复盘", "回测验证", "设置与说明", "事件跟踪"];
 const patterns = ["启动龙头", "冰点龙头", "分歧回补", "冲高回落风险", "退潮回避", "持续观察"];
 const pct = (n: number | null | undefined) => n == null ? "—" : `${n.toFixed(2)}%`;
 
@@ -23,11 +23,11 @@ function Chart({ rows, x, fields }: { rows: object[]; x: string; fields: { key: 
 export default function CyclePanel({ onResearch }: { onResearch: (code: string) => Promise<void> }) {
   const [tab, setTab] = useState(0), [source, setSource] = useState("akshare"), [date, setDate] = useState(""), [pattern, setPattern] = useState("启动龙头"), [horizon, setHorizon] = useState(2);
   const [result, setResult] = useState<Result | null>(null), [error, setError] = useState(""), [loading, setLoading] = useState(true), [reload, setReload] = useState(0);
-  useEffect(() => { const value = new URLSearchParams(window.location.search).get("cycleTab"); if (value === "events") setTab(5); if (value === "simulation") setTab(6); }, []);
+  useEffect(() => { const value = new URLSearchParams(window.location.search).get("cycleTab"); if (value === "events") setTab(5); if (value === "simulation") navigateInvestmentView("trade",undefined,{tab:"strategies",strategy:"leader-rebound"}); }, []);
   function selectTab(index: number) {
     setTab(index);
     const url = new URL(window.location.href);
-    if (index === 5 || index === 6) url.searchParams.set("cycleTab", index === 5 ? "events" : "simulation");
+    if (index === 5) url.searchParams.set("cycleTab", "events");
     else { url.searchParams.delete("cycleTab"); url.searchParams.delete("cycleEvent"); }
     window.history.replaceState({}, "", url);
   }
@@ -66,7 +66,7 @@ export default function CyclePanel({ onResearch }: { onResearch: (code: string) 
     </Card>
     <nav className="flex flex-wrap gap-2" aria-label="情绪周期页签">{tabs.map((name, i) => <button key={name} aria-pressed={tab === i} onClick={() => selectTab(i)} className={`rounded-xl px-4 py-2.5 text-sm ${tab === i ? "bg-[#173f2c] text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{name}</button>)}</nav>
     {tab === 5 && <CycleEventsPanel onResearch={onResearch} />}
-    {tab === 6 && <CycleStrategySimulation />}
+    <a className="inline-flex text-sm font-medium text-emerald-800 underline" href="/invest?view=trade&tab=strategies&strategy=leader-rebound">打开情绪龙头回补模拟账户</a>
     {tab < 5 && loading && <Card>{live ? "正在获取真实行情…" : "正在计算可用时间以内的信号…"}</Card>}
     {tab < 5 && error && <Card><p className="text-red-700">数据源不可用：{error}</p><p className="mt-2 text-sm text-slate-500">请检查行情服务连接，或稍后重试。系统不会自动替换为模拟数据。</p><button className={`${buttonClass} mt-3`} onClick={() => setReload(n => n + 1)}>重试</button></Card>}
     {tab < 5 && !loading && result && !current && <Card>该时点没有已采集的快照。{result.dates.length ? `可用采集日期：${result.dates.join("、")}` : "请先返回当前行情开始采集。"}<button className={`${buttonClass} mt-3 block`} onClick={() => setDate("")}>返回当前行情</button></Card>}

@@ -1,13 +1,11 @@
 """按A股代码识别公司；客观行情与已实施分红独立标注来源。"""
-from datetime import date, timedelta, datetime
-import re
+from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException
 import httpx
 
 from app.cycle.market import fetch_quotes, normalize_symbol
 from app.cycle.dividends import build_dividends
-from app.cycle.live import TZ
 
 router = APIRouter(prefix="/companies", tags=["公司识别"])
 
@@ -16,7 +14,7 @@ def stock_code(value):
     symbol = normalize_symbol(value)
     code = symbol[2:]
     expected = "sh" if code.startswith("6") else "sz" if code.startswith(("0", "3")) else "bj" if code.startswith(("4", "8", "92")) else None
-    if expected is None or symbol[:2] != expected or (expected == "sh" and not code.startswith(("600", "601", "603", "605", "688", "689"))) or (expected == "sz" and not code.startswith(("000", "001", "002", "003", "300", "301"))):
+    if expected is None or symbol[:2] != expected or (expected == "sh" and not code.startswith(("600", "601", "603", "605", "688", "689"))) or (expected == "sz" and not code.startswith(("000", "001", "002", "003", "300", "301", "302"))):
         raise ValueError("请输入A股公司股票代码，不支持指数或基金代码")
     return code
 

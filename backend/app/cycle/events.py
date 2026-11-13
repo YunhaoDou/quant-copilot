@@ -5,6 +5,7 @@ from pathlib import Path
 import json
 import sqlite3
 import uuid
+from threading import Lock
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -14,28 +15,38 @@ DB_PATH = Path(__file__).resolve().parents[2] / "data" / "cycle" / "events.sqlit
 router = APIRouter(prefix="/cycle/events", tags=["板块事件跟踪"])
 
 
+_schema_lock=Lock()
+_initialized=set()
+
 @contextmanager
 def database(path=None):
     path = path or DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path, timeout=15) as db:
         db.row_factory = sqlite3.Row
-        db.execute("""CREATE TABLE IF NOT EXISTS events (
-            id TEXT PRIMARY KEY, sector_code TEXT NOT NULL, name TEXT NOT NULL,
-            start_date TEXT NOT NULL, first_at TEXT NOT NULL, first_snapshot TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'active', stage TEXT NOT NULL DEFAULT '待确认',
-            plan TEXT NOT NULL DEFAULT '', invalidation TEXT NOT NULL DEFAULT '',
-            UNIQUE(sector_code,start_date))""")
-        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_active_sector ON events(sector_code) WHERE status='active'")
-        db.execute("""CREATE TABLE IF NOT EXISTS observations (
-            event_id TEXT NOT NULL, quote_time TEXT NOT NULL, observed_at TEXT NOT NULL,
-            trade_date TEXT NOT NULL, payload TEXT NOT NULL,
-            PRIMARY KEY(event_id,quote_time))""")
-        db.execute("""CREATE TABLE IF NOT EXISTS records (
-            id TEXT PRIMARY KEY, event_id TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL)""")
-        db.execute("""CREATE TABLE IF NOT EXISTS candidates (
-            event_id TEXT NOT NULL, symbol TEXT NOT NULL, name TEXT NOT NULL,
-            PRIMARY KEY(event_id,symbol))""")
+        identity=(str(path.resolve()),path.stat().st_ino)
+        if identity not in _initialized:
+            with _schema_lock:
+                if identity not in _initialized:
+                    try:db.execute("PRAGMA journal_mode=WAL")
+                    except sqlite3.OperationalError:pass
+                    db.execute("""CREATE TABLE IF NOT EXISTS events (
+                        id TEXT PRIMARY KEY, sector_code TEXT NOT NULL, name TEXT NOT NULL,
+                        start_date TEXT NOT NULL, first_at TEXT NOT NULL, first_snapshot TEXT NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'active', stage TEXT NOT NULL DEFAULT '待确认',
+                        plan TEXT NOT NULL DEFAULT '', invalidation TEXT NOT NULL DEFAULT '',
+                        UNIQUE(sector_code,start_date))""")
+                    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_active_sector ON events(sector_code) WHERE status='active'")
+                    db.execute("""CREATE TABLE IF NOT EXISTS observations (
+                        event_id TEXT NOT NULL, quote_time TEXT NOT NULL, observed_at TEXT NOT NULL,
+                        trade_date TEXT NOT NULL, payload TEXT NOT NULL,
+                        PRIMARY KEY(event_id,quote_time))""")
+                    db.execute("""CREATE TABLE IF NOT EXISTS records (
+                        id TEXT PRIMARY KEY, event_id TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL)""")
+                    db.execute("""CREATE TABLE IF NOT EXISTS candidates (
+                        event_id TEXT NOT NULL, symbol TEXT NOT NULL, name TEXT NOT NULL,
+                        PRIMARY KEY(event_id,symbol))""")
+                    _initialized.add(identity)
         yield db
 
 

@@ -13,7 +13,6 @@ from app.db.session import AsyncSessionLocal
 from app.models import Strategy, Ticker
 from app.routes import app_settings as app_settings_route
 from app.routes import (
-    asset_allocation,
     backtest,
     compliance,
     fund as fund_route,
@@ -36,7 +35,7 @@ from app.routes.research_lab import router as research_lab_router
 from app.cycle.radar import router as radar_router
 from app.cycle.companies import router as companies_router
 from app.cycle.events import router as events_router
-from app.cycle.event_monitor import run_monitor
+from app.cycle.event_monitor import run_monitor, run_etf_monitor, run_account_monitor, run_read_model_monitor
 from app.cycle.strategy_sim import router as strategy_sim_router
 from app.cycle.trend_forward import router as trend_forward_router
 from app.cycle.trend_leader import router as trend_leader_router
@@ -83,12 +82,19 @@ async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as session:
         await app_settings_service.load_settings_from_db(session)
     event_task = asyncio.create_task(run_monitor())
+    etf_task = asyncio.create_task(run_etf_monitor())
+    account_task = asyncio.create_task(run_account_monitor())
+    read_task = asyncio.create_task(run_read_model_monitor())
     try:
         yield
     finally:
         event_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await event_task
+        etf_task.cancel()
+        account_task.cancel()
+        read_task.cancel()
+        for task in (event_task,etf_task,account_task,read_task):
+            with suppress(asyncio.CancelledError):
+                await task
 
 
 app = FastAPI(
@@ -104,8 +110,15 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["ETag"],
 )
 
+from app.cycle.etf_universe import router as etf_router
+from app.cycle.shibor_sim import router as shibor_router
+from app.cycle.read_api import router as read_router
+app.include_router(read_router)
+app.include_router(etf_router)
+app.include_router(shibor_router)
 app.include_router(health.router)
 app.include_router(strategy_center_router)
 app.include_router(trend_leader_router)
@@ -128,7 +141,6 @@ app.include_router(risk.router)
 app.include_router(fund_flow.router)
 app.include_router(fund_route.router)
 app.include_router(screening.router)
-app.include_router(asset_allocation.router)
 app.include_router(sim.router)
 app.include_router(app_settings_route.router)
 

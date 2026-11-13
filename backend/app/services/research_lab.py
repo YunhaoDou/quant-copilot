@@ -11,6 +11,7 @@ import pandas as pd
 
 from app.cycle.live import TZ, number
 from app.cycle.market import fetch_daily, fetch_quotes
+from app.services import indicators
 from app.services.data_ingestion import fetch_history
 from app.services.news_sentiment import _fetch_headlines
 
@@ -20,24 +21,21 @@ def finite(value):
 
 
 def metrics(prices, risk_free=0.02):
+    """诊断用风险统计。年化 CAGR 以每个价格变动计一期（252/(len(p)-1)），
+    夏普/索提诺的 risk_free 为年化利率，索提诺下行风险使用全样本超额收益的均方根。
+    字段与单位（百分数、未四舍五入）沿用旧终端输出。"""
     p = pd.Series(prices, dtype=float).dropna()
     if len(p) < 2 or (p <= 0).any():
         raise ValueError("至少需要两个有效正价格")
     r = p.pct_change().dropna()
-    drawdown = p / p.cummax() - 1
-    annual = (p.iloc[-1] / p.iloc[0]) ** (252 / len(r)) - 1
-    vol = r.std() * np.sqrt(252)
-    downside = np.sqrt(np.mean(np.minimum(r - risk_free / 252, 0) ** 2)) * np.sqrt(252)
-    var = max(0, -float(r.quantile(.05)))
-    tail = r[r <= r.quantile(.05)]
-    gains, losses = r[r > 0], r[r < 0]
-    mdd = float(drawdown.min())
-    return {"total_return": finite((p.iloc[-1] / p.iloc[0] - 1) * 100), "annual_return": finite(annual * 100),
-        "volatility": finite(vol * 100), "sharpe": finite((r.mean() * 252 - risk_free) / vol) if vol > 0 else None,
-        "sortino": finite((r.mean() * 252 - risk_free) / downside) if downside > 0 else None,
-        "calmar": finite(annual / abs(mdd)) if mdd else None, "max_drawdown": mdd * 100,
-        "var95": var * 100, "cvar95": max(0, -float(tail.mean())) * 100,
-        "win_rate": float((r > 0).mean() * 100), "profit_loss_ratio": finite(gains.mean() / abs(losses.mean())) if len(gains) and len(losses) else None,
+    annual = indicators.annualized_return(p)
+    mdd = indicators.max_drawdown(p)
+    return {"total_return": finite(indicators.total_return(p) * 100), "annual_return": finite(annual * 100),
+        "volatility": finite(indicators.annualized_volatility(r) * 100), "sharpe": finite(indicators.sharpe(r, risk_free=risk_free)),
+        "sortino": finite(indicators.sortino(r, risk_free=risk_free)),
+        "calmar": finite(indicators.calmar(annual, mdd)), "max_drawdown": mdd * 100,
+        "var95": indicators.value_at_risk(r) * 100, "cvar95": indicators.conditional_value_at_risk(r) * 100,
+        "win_rate": indicators.win_rate(r) * 100, "profit_loss_ratio": finite(indicators.profit_loss_ratio(r)),
         "samples": len(p)}
 
 

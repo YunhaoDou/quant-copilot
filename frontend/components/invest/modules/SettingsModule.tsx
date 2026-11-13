@@ -1,17 +1,24 @@
 "use client";
+import WorkspaceTabs from "../WorkspaceTabs";
+import ResearchLabModule from "./ResearchLabModule";
 
 import { useEffect, useState } from "react";
 
-import { api, getApiUrl, setApiUrl, type AppSettingsView } from "@/lib/api";
+import { api, getApiUrl, setApiUrl } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { navigateInvestmentView } from "@/lib/invest-navigation";
 
-export default function SettingsModule() {
+export default function SettingsModule() {return <WorkspaceTabs label="系统设置功能" tabs={[{id:"connection",label:"连接与缓存",content:<ConnectionSettings/>},{id:"models",label:"模型与通知",content:<ResearchLabModule section="模型与通知"/>}]}/>;}
+
+// 模型/LLM 配置（供应商、密钥、模型、LLM 缓存、通知）只在「模型与通知」页签维护（ResearchLabModule → /research-lab/config）。
+function goToModels() {
+  navigateInvestmentView("help", undefined, { tab: "settings", section: "models" });
+}
+
+function ConnectionSettings() {
   const { t } = useLocale();
-  const [current, setCurrent] = useState<AppSettingsView | null>(null);
-  const [deepseekKey, setDeepseekKey] = useState("");
   const [backendUrl, setBackendUrl] = useState("");
   const [newsCacheTtl, setNewsCacheTtl] = useState(2);
-  const [llmCacheTtl, setLlmCacheTtl] = useState(24);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
@@ -19,9 +26,7 @@ export default function SettingsModule() {
     api
       .getSettings()
       .then((s) => {
-        setCurrent(s);
         setNewsCacheTtl(s.news_cache_ttl_hours);
-        setLlmCacheTtl(s.llm_cache_ttl_hours);
       })
       .catch((e) => setStatus(t("settings.loadError", { err: String(e) })));
   }, [t]);
@@ -29,13 +34,7 @@ export default function SettingsModule() {
   async function save() {
     setStatus(t("settings.saving"));
     try {
-      const updated = await api.updateSettings({
-        deepseek_api_key: deepseekKey.trim() || undefined,
-        news_cache_ttl_hours: newsCacheTtl,
-        llm_cache_ttl_hours: llmCacheTtl,
-      });
-      setCurrent(updated);
-      setDeepseekKey("");
+      await api.updateSettings({ news_cache_ttl_hours: newsCacheTtl });
       if (backendUrl.trim()) setApiUrl(backendUrl.trim());
       setStatus(t("settings.saved"));
     } catch (e) {
@@ -49,22 +48,11 @@ export default function SettingsModule() {
       <p className="text-sm text-gray-500 mt-1">{t("settings.desc")}</p>
 
       <div className="mt-8 space-y-6">
-        <div>
-          <label className="text-sm font-medium">{t("settings.deepseekKey")}</label>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {current
-              ? current.deepseek_api_key_set
-                ? t("settings.deepseekKeySet", { last4: current.deepseek_api_key_masked.slice(-4) })
-                : t("settings.deepseekKeyNotSet")
-              : ""}
-          </p>
-          <input
-            type="password"
-            className="border rounded px-2 py-1 mt-2 block w-full"
-            placeholder={t("settings.deepseekKeyPlaceholder")}
-            value={deepseekKey}
-            onChange={(e) => setDeepseekKey(e.target.value)}
-          />
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+          <p>{t("settings.modelsMoved")}</p>
+          <button type="button" className="mt-2 text-emerald-800 underline" onClick={goToModels}>
+            {t("settings.modelsMovedCta")}
+          </button>
         </div>
 
         <div>
@@ -77,28 +65,16 @@ export default function SettingsModule() {
           />
         </div>
 
-        <div className="flex gap-4">
-          <label className="text-sm flex-1">
-            {t("settings.newsCacheTtl")}
-            <input
-              type="number"
-              min={0}
-              className="border rounded px-2 py-1 block w-full mt-1"
-              value={newsCacheTtl}
-              onChange={(e) => setNewsCacheTtl(Number(e.target.value))}
-            />
-          </label>
-          <label className="text-sm flex-1">
-            {t("settings.llmCacheTtl")}
-            <input
-              type="number"
-              min={0}
-              className="border rounded px-2 py-1 block w-full mt-1"
-              value={llmCacheTtl}
-              onChange={(e) => setLlmCacheTtl(Number(e.target.value))}
-            />
-          </label>
-        </div>
+        <label className="text-sm block">
+          {t("settings.newsCacheTtl")}
+          <input
+            type="number"
+            min={0}
+            className="border rounded px-2 py-1 block w-full mt-1"
+            value={newsCacheTtl}
+            onChange={(e) => setNewsCacheTtl(Number(e.target.value))}
+          />
+        </label>
 
         <button className="border rounded px-4 py-1.5 bg-black text-white text-sm" onClick={save}>
           {t("settings.save")}

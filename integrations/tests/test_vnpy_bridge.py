@@ -23,11 +23,11 @@ class ClientTests(unittest.TestCase):
         for url in ("https://127.0.0.1:8000","http://example.com","http://user@127.0.0.1:8000","http://127.0.0.1:8000/a"):
             with self.assertRaises(ValueError):LocalClient(url)
 
-    def test_routes_all_seven_controls_only_to_paper_endpoints(self):
+    def test_routes_all_eight_controls_only_to_paper_endpoints(self):
         c=FakeClient()
         for identifier in STRATEGIES:
             for action in ("start","pause","exit"):c.command(identifier,action)
-        self.assertEqual(len(c.calls),21)
+        self.assertEqual(len(c.calls),24)
         self.assertIn(("/trend-forward/exit","POST"),c.calls)
         self.assertIn(("/cycle/strategy-sim/pause","POST"),c.calls)
         with self.assertRaises(ValueError):c.command("unknown","start")
@@ -35,7 +35,7 @@ class ClientTests(unittest.TestCase):
 
     def test_legacy_account_is_merged_without_resetting_others(self):
         c=FakeClient();data=c.snapshot()
-        self.assertEqual(len(data['strategies']),7)
+        self.assertEqual(len(data['strategies']),8)
         self.assertEqual(next(s for s in data['strategies'] if s['id']=='leader-rebound')['account']['status'],'paused')
         self.assertEqual(data['strategies'][0]['account']['equity'],100000)
 
@@ -58,7 +58,7 @@ class GatewayTests(unittest.TestCase):
 class UiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.app=QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    def test_seven_native_pages_controls_and_offline_status(self):
+    def test_eight_native_pages_controls_and_offline_status(self):
         class Bridge:
             snapshot=None
             def __init__(self):self.calls=[]
@@ -67,7 +67,7 @@ class UiTests(unittest.TestCase):
         class Main:
             def get_engine(self,*a):return bridge
         w=QuantCopilotManager(Main(),EventEngine());w.show();self.app.processEvents();w.process_event(Event('eQuantCopilotState',{'connected':True,'data':snapshot()}))
-        self.assertEqual(w.tabs.count(),7);self.assertEqual(len(w.buttons),21)
+        self.assertEqual(w.tabs.count(),8);self.assertEqual(len(w.buttons),24)
         self.assertIn('5580',w.status_label.text())
         w.buttons[0].click();self.assertEqual(bridge.calls[-1],('quality-value','start'))
         w.render({'connected':False,'error':'服务停止'})

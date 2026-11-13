@@ -4,22 +4,25 @@ approval tiers, suitability). Retrieval is a from-scratch TF-IDF cosine search �
 DB, no embeddings API, no new dependency — grounded strictly in the retrieved excerpts: if
 nothing in the corpus is relevant enough, the question is answered "not covered" WITHOUT
 calling the LLM, so the model is never given a chance to invent an answer from nothing.
-"""
+LLM calls go through the shared structured_completion helper (validate/retry/cache)."""
 import hashlib
-import json
 import math
 import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from pydantic import ValidationError
 from redis.asyncio import Redis
 
 from app.config import settings
 from app.schemas.compliance import ComplianceAnswerSchema
 from app.services.i18n import DEFAULT_LANG, language_instruction
-from app.services.llm_research import LLMClient
+from app.services.llm_research import (
+    MAX_RETRIES as MAX_RETRIES,  # 保留本模块的历史导入路径（调用方与测试从这里取）
+    LLMClient,
+    read_cached_payload,
+    structured_completion,
+)
 
 NOT_COVERED_MESSAGE = {
     "en": "This isn't covered by the compliance corpus on file. Escalate to a compliance officer.",
@@ -29,7 +32,6 @@ NOT_COVERED_MESSAGE = {
 CORPUS_DIR = Path(__file__).resolve().parent.parent / "data" / "compliance"
 TOP_K = 3
 MIN_SIMILARITY = 0.10
-MAX_RETRIES = 2
 TOKEN_RE = re.compile(r"[a-z0-9]+")
 STOPWORDS = frozenset(
     "a an the is are was were be been being to of in on for and or if than then "
@@ -130,11 +132,11 @@ def _cache_key(question: str, lang: str) -> str:
 async def answer_question(
     redis: Redis, question: str, client: LLMClient | None = None, lang: str = DEFAULT_LANG
 ) -> dict:
-    cached = await redis.get(_cache_key(question, lang))
-    if cached:
-        payload = json.loads(cached)
-        payload["cache_hit"] = True
-        return payload
+    cache_key = _cache_key(question, lang)
+    # Cache lookup precedes retrieval so a repeat question never re-ranks the corpus.
+    cached = await read_cached_payload(redis, cache_key)
+    if cached is not None:
+        return cached
 
     hits = retrieve(question)
     if not hits:
@@ -146,36 +148,36 @@ async def answer_question(
             "cache_hit": False,
         }
 
-    client = client or LLMClient()
-    system_prompt = SYSTEM_PROMPT + language_instruction(lang)
     known_doc_ids = {h["doc_id"] for h in hits}
-    prompt = _build_prompt(question, hits)
-    last_error: Exception | None = None
 
-    for _attempt in range(MAX_RETRIES + 1):
-        text, _in_tok, _out_tok = client.complete(prompt, system_prompt=system_prompt)
-        try:
-            data = json.loads(text)
-            validated = ComplianceAnswerSchema.model_validate(data)
-            bogus = set(validated.citations) - known_doc_ids
-            if bogus:
-                raise ValueError(f"cited unknown source doc id(s): {sorted(bogus)}")
-        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-            last_error = exc
-            prompt = _build_prompt(question, hits) + (
-                f"\n\nYour previous response was invalid: {exc}\n"
-                f"citations must be a subset of {sorted(known_doc_ids)}. Return ONLY the corrected JSON object."
-            )
-            continue
+    def validate_model(validated: ComplianceAnswerSchema) -> None:
+        bogus = set(validated.citations) - known_doc_ids
+        if bogus:
+            raise ValueError(f"cited unknown source doc id(s): {sorted(bogus)}")
 
-        payload = {
+    def payload_from_model(validated: ComplianceAnswerSchema) -> dict:
+        return {
             "question": question,
             "answer": validated.answer,
             "citations": validated.citations,
             "grounded": True,
             "cache_hit": False,
         }
-        await redis.set(_cache_key(question, lang), json.dumps(payload), ex=settings.LLM_CACHE_TTL_HOURS * 3600)
-        return payload
 
-    raise ValueError(f"LLM failed to produce a grounded, schema-valid answer after {MAX_RETRIES} retries: {last_error}")
+    result = await structured_completion(
+        redis,
+        client,
+        ComplianceAnswerSchema,
+        _build_prompt(question, hits),
+        cache_key=cache_key,
+        cache_ttl_hours=settings.LLM_CACHE_TTL_HOURS,
+        system_prompt=SYSTEM_PROMPT + language_instruction(lang),
+        repair_prompt=lambda exc: _build_prompt(question, hits) + (
+            f"\n\nYour previous response was invalid: {exc}\n"
+            f"citations must be a subset of {sorted(known_doc_ids)}. Return ONLY the corrected JSON object."
+        ),
+        payload_from_model=payload_from_model,
+        validate_model=validate_model,
+        error_message="LLM failed to produce a grounded, schema-valid answer",
+    )
+    return result.payload

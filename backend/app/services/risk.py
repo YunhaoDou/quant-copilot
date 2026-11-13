@@ -8,12 +8,12 @@ equity curve have looked like." That is a hypothetical, not a realized track rec
 """
 from dataclasses import dataclass
 
-import numpy as np
 import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import PaperPosition
+from app.services import indicators
 from app.services.paper_trading import OrderError, _get_account, latest_price
 
 # Alert thresholds (fractions of equity unless noted).
@@ -59,12 +59,12 @@ def _portfolio_drawdown(
 
     prices = prices.tail(window)
     equity = cash + prices.mul(pd.Series(shares)).sum(axis=1)
-    running_max = equity.cummax()
-    drawdown = equity / running_max - 1.0
+    drawdown = indicators.max_drawdown(equity)
     daily_ret = equity.pct_change().dropna()
-    vol = float(daily_ret.std() * np.sqrt(252)) if len(daily_ret) > 1 else 0.0
+    # A single observation has an undefined sample std; keep the old "treat as flat" 0.0.
+    vol = indicators.annualized_volatility(daily_ret) if len(daily_ret) > 1 else 0.0
     return {
-        "max_drawdown": round(float(drawdown.min()), 4),
+        "max_drawdown": round(drawdown, 4),
         "annualized_vol": round(vol, 4),
         "window_days": int(len(prices)),
     }

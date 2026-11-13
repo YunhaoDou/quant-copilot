@@ -1,4 +1,4 @@
-"""启动vn.py 4.5.0及Quant Copilot七策略模拟；不接券商。"""
+"""启动vn.py 4.5.0及Quant Copilot八策略模拟；不接券商。"""
 from vnpy.event import EventEngine
 from vnpy.trader.engine import MainEngine
 from vnpy.trader.ui import MainWindow, create_qapp

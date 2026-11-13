@@ -2,6 +2,9 @@
 
 > v0.1 · 2026-06-06 · 仅列出主要 endpoint,完整版以 `/docs`(OpenAPI)为准
 
+> ⚠️ **归档的 v0.1 设计草案（2026-06-06）**：当前实现已转向 A 股个人投资系统，本文部分内容（JWT 认证、`users` 表、Alembic 迁移、`/auth` 路由、Claude 主流程等）**未实现或已被替代**。
+> 现行事实以 [README](../../README.md)、`/docs`（OpenAPI）和 `backend/app` 代码为准；本文仅作历史设计参考，勿据此接入。
+
 ## 风格
 
 - REST,JSON

@@ -1,5 +1,7 @@
 """真实公开行情适配：腾讯指数/分时、东方财富板块与涨跌停池。
 
+腾讯报价的抓取和字段解析统一在 `app.cycle.market`（`fetch_quote_rows`/`parse_quotes`），
+这里只把解析结果映射成看板需要的指数报价形状，不再维护第二份正则与字段下标。
 各数据集独立标注状态；没有供应商时间戳的股票池不宣称秒级实时。
 采集快照存入本机 SQLite，未观测到的历史不回填。
 """
@@ -12,13 +14,13 @@ from zoneinfo import ZoneInfo
 import copy
 import json
 import math
-import re
 import sqlite3
 
 import httpx
 
 TZ = ZoneInfo("Asia/Shanghai")
 DB_PATH = Path(__file__).resolve().parents[2] / "data" / "cycle" / "live.sqlite"
+INDEX_CODES = ("sh000001", "sz399001", "sz399006")
 _cache = {}
 _lock = Lock()
 
@@ -31,20 +33,30 @@ def number(value):
         return None
 
 
-def parse_quotes(text):
-    quotes = []
-    for symbol, raw in re.findall(r'v_(\w+)="([^"]*)"', text):
-        fields = raw.split("~")
-        if len(fields) < 38 or not fields[30]:
-            continue
-        try:
-            timestamp = datetime.strptime(fields[30], "%Y%m%d%H%M%S").replace(tzinfo=TZ)
-        except ValueError:
-            continue
-        quotes.append(dict(symbol=symbol, name=fields[1], price=number(fields[3]), pct=number(fields[32]), high=number(fields[33]), low=number(fields[34]), amount=number(fields[37]), timestamp=timestamp.isoformat()))
+def _index_quote(row):
+    """把 market.parse_quotes 的报价行映射成看板指数报价（成交额用万元，与历史口径一致）。"""
+    amount_yuan = row["amount_yuan"]
+    return dict(symbol=row["symbol"], name=row["name"], price=row["price"], pct=row["pct"],
+                high=row["high"], low=row["low"],
+                amount=amount_yuan / 10000 if amount_yuan is not None else None,
+                timestamp=row["quote_time"])
+
+
+def _index_quotes(rows):
+    quotes = [_index_quote(row) for row in rows]
     if not quotes or any(q["price"] is None or q["pct"] is None for q in quotes):
         raise ValueError("腾讯指数行情字段缺失")
     return quotes
+
+
+def parse_quotes(text):
+    """委托 `app.cycle.market.parse_quotes` 的单一腾讯解析实现，只做指数报价形状映射。
+
+    保留原有语义：没有解析出任何指数、或任一指数缺价格/涨跌幅时抛 ValueError，
+    不允许把残缺行情当完整快照返回。
+    """
+    from app.cycle.market import parse_quotes as parse_market_quotes
+    return _index_quotes(parse_market_quotes(text))
 
 
 def parse_pool(payload, date):
@@ -187,9 +199,12 @@ class LiveDataProvider:
 
     def fetch(self):
         try:
-            response = self.client.get("https://qt.gtimg.cn/q=sh000001,sz399001,sz399006")
-            response.raise_for_status()
-            quotes = parse_quotes(response.content.decode("gb18030", errors="replace"))
+            from app.cycle.market import fetch_quote_rows
+            # 指数报价走 market.py 唯一的抓取+解析实现；这里刻意不经过 market.fetch_quotes
+            # 的报价缓存：看板整体已由 live_dashboard 按 live_cache_seconds 缓存，且这里必须
+            # 复用 LiveDataProvider 的 client（测试注入 transport、带统一 UA/Referer）。
+            # 两层缓存分工明确：market 缓存服务逐标的报价消费方，live 缓存服务整张看板。
+            quotes = _index_quotes(fetch_quote_rows(INDEX_CODES, self.client))
             quote = next(q for q in quotes if q["symbol"] == "sh000001")
             date = quote["timestamp"][:10]
             compact = date.replace("-", "")

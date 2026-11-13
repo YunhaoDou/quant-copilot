@@ -24,10 +24,12 @@ async def ingest(code: str, start: str = "20230101", session: AsyncSession = Dep
 @router.get("")
 async def list_funds(session: AsyncSession = Depends(get_session)):
     result = await session.execute(select(Fund))
-    return [
-        {"code": f.code, "name": f.name, "fund_type": f.fund_type, "last_synced_at": f.last_synced_at}
-        for f in result.scalars()
-    ]
+    from app.cycle.etf_universe import saved
+    stored={f.code:f for f in result.scalars()}
+    rows=[{"code":r["code"],"name":r["name"],"fund_type":"ETF","asset_type":"ETF","last_synced_at":stored[r["code"]].last_synced_at if r["code"] in stored else None} for r in (saved() or {}).get("rows",[])]
+    codes={r["code"] for r in rows}
+    rows.extend({"code":f.code,"name":f.name,"fund_type":f.fund_type,"last_synced_at":f.last_synced_at} for f in stored.values() if f.code not in codes)
+    return rows
 
 
 @router.get("/{code}/nav")

@@ -1,26 +1,19 @@
-"""Multi-factor cross-sectional stock screening: scores every ticker in the ingested
-universe (minus benchmark ETFs) on 9 factors computed purely from stored OHLCV — including
-the fund-flow Agent's own score, so its output literally feeds this one, matching the
-"one agent's output is the next agent's input" contract from the original design note.
-No new data source: same Price table everything else already reads.
+"""Multi-factor cross-sectional factor computation for the live full-market screening
+path (``cycle.full_market``): raw factors are computed per ticker purely from stored
+OHLCV — including the fund-flow Agent's own score, so its output literally feeds this
+one, matching the "one agent's output is the next agent's input" contract from the
+original design note. No new data source: same Price table everything else already reads.
 
-Composite score = average of per-factor cross-sectional z-scores (equal-weighted, signed
-so that "higher is always better"). Missing factors (not enough history yet) are simply
-left out of a ticker's average rather than crashing the whole screen.
+The composite score is the average of per-factor cross-sectional z-scores (equal-weighted,
+signed so that "higher is always better"). Missing factors (not enough history yet) are
+simply left out of a ticker's average rather than crashing the whole screen.
 """
 from dataclasses import dataclass, field
 from statistics import mean, pstdev
 
-import numpy as np
 import pandas as pd
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import StockScore, Ticker
-from app.services import fund_flow
-from app.services.data_ingestion import load_ohlcv
-
-BENCHMARK_SYMBOLS = {"SPY", "510300.SS"}  # benchmark ETFs, not individual stock picks
+from app.services import fund_flow, indicators
 
 FACTOR_DIRECTION = {
     "momentum_3m": 1,
@@ -80,7 +73,7 @@ def _volatility_20d(close: pd.Series) -> float | None:
     if len(close) < 21:
         return None
     daily_ret = close.pct_change().dropna().tail(20)
-    return float(daily_ret.std() * np.sqrt(252))
+    return indicators.annualized_volatility(daily_ret)
 
 
 def _rsi_14(close: pd.Series) -> float | None:
@@ -119,20 +112,15 @@ def _trend_vs_200ma(close: pd.Series) -> float | None:
 def _max_drawdown_1y(close: pd.Series) -> float | None:
     if len(close) < 2:
         return None
-    tail = close.tail(252)
-    running_max = tail.cummax()
-    drawdown = tail / running_max - 1.0
-    return float(drawdown.min())
+    return indicators.max_drawdown(close.tail(252))
 
 
 def _sharpe_like(close: pd.Series) -> float | None:
     daily_ret = close.pct_change().dropna().tail(252)
     if len(daily_ret) < 20:
         return None
-    std = daily_ret.std()
-    if std == 0:
-        return None
-    return float(daily_ret.mean() / std * np.sqrt(252))
+    # Risk-free-free cross-sectional "return per unit of vol" score.
+    return indicators.sharpe(daily_ret, risk_free=0.0)
 
 
 def compute_stock_factors(df: pd.DataFrame, symbol: str) -> StockFactors:
@@ -211,62 +199,3 @@ def rank_universe(factors_list: list[StockFactors], lang: str = DEFAULT_LANG) ->
     for rank, r in enumerate(results, start=1):
         r["rank"] = rank
     return results
-
-
-async def run_screening(
-    session: AsyncSession,
-    top_n: int = 10,
-    lang: str = DEFAULT_LANG,
-    market: str | None = None,
-) -> dict:
-    query = select(Ticker.symbol)
-    if market is not None:
-        query = query.where(Ticker.market == market)
-    tickers = (await session.execute(query)).scalars().all()
-    universe = [s for s in tickers if s not in BENCHMARK_SYMBOLS]
-
-    factors_list = []
-    for symbol in universe:
-        df = await load_ohlcv(session, symbol)
-        if df.empty:
-            continue
-        factors_list.append(compute_stock_factors(df, symbol))
-
-    if not factors_list:
-        return {"results": [], "universe_size": 0}
-
-    ranked = rank_universe(factors_list, lang=lang)
-
-    for r in ranked:
-        existing = (
-            await session.execute(
-                select(StockScore).where(
-                    StockScore.ticker_symbol == r["symbol"],
-                    StockScore.as_of_date == r["as_of_date"].date(),
-                )
-            )
-        ).scalar_one_or_none()
-        if existing is None:
-            existing = StockScore(ticker_symbol=r["symbol"], as_of_date=r["as_of_date"].date())
-            session.add(existing)
-        existing.composite_score = r["composite_score"]
-        existing.rank = r["rank"]
-        existing.factors = r["factors"]
-        existing.reasons = r["reasons"]
-        existing.method = "zscore_9factor_v1"
-    await session.commit()
-
-    return {
-        "results": [
-            {
-                "symbol": r["symbol"],
-                "as_of_date": r["as_of_date"].date().isoformat(),
-                "rank": r["rank"],
-                "composite_score": r["composite_score"],
-                "factors": r["factors"],
-                "reasons": r["reasons"],
-            }
-            for r in ranked[:top_n]
-        ],
-        "universe_size": len(ranked),
-    }

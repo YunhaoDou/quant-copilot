@@ -61,6 +61,30 @@ async def run_monitor():
                 monitor_status.update(state="采集失败", error="公开行情请求失败，稍后自动重试")
         else:
             monitor_status.update(state="采集窗口外")
+        await asyncio.sleep(config["event_poll_seconds"])
+
+
+async def run_etf_monitor():
+    """ETF与月频模拟独立驻留，避免被全股票深入核验拖延到错过收盘。"""
+    while True:
+        config=load_config()
+        try:
+            from app.cycle.etf_universe import enqueue
+            enqueue()
+        except Exception:
+            logger.exception("全ETF追踪调度失败")
+        try:
+            from app.cycle.shibor_sim import run_once
+            await asyncio.to_thread(run_once)
+        except Exception:
+            logger.exception("SHIBOR模拟本轮更新失败")
+        await asyncio.sleep(config["event_poll_seconds"])
+
+
+async def run_account_monitor():
+    """账户与报价轮次独立于板块采集，避免供应商慢请求层层串行。"""
+    while True:
+        config=load_config()
         try:
             from app.cycle.strategy_center import run_accounts
             await asyncio.to_thread(run_accounts)
@@ -72,3 +96,13 @@ async def run_monitor():
         except Exception:
             logger.exception("第七策略账户本轮更新失败")
         await asyncio.sleep(config["event_poll_seconds"])
+
+
+async def run_read_model_monitor():
+    """后台预热只读快照；失败保留旧版本，不触碰账户或补造数据。"""
+    from app.cycle.read_api import dividend_model,screening_model
+    while True:
+        for build in (dividend_model,screening_model):
+            try:await asyncio.to_thread(build)
+            except Exception:logger.exception("只读快照预热失败，下一轮重试")
+        await asyncio.sleep(5)

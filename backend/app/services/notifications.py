@@ -1,8 +1,7 @@
-"""Lark/Discord webhook push. Same optional-config shape as earnings/wechat_push.py:
-a missing webhook URL means the channel is silently skipped, not an error — callers
-should treat notification failures as best-effort and never let them break the caller's
-main flow (backtest results, paper-trade fills, etc. must persist regardless of whether
-the push succeeds).
+"""Lark/Discord webhook push. Optional-config shape: a missing webhook URL means the
+channel is silently skipped, not an error — callers should treat notification failures as
+best-effort and never let them break the caller's main flow (backtest results, paper-trade
+fills, etc. must persist regardless of whether the push succeeds).
 """
 import logging
 

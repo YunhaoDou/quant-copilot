@@ -1,4 +1,7 @@
 "use client";
+import EtfTrackerPanel from "../EtfTrackerPanel";
+import WorkspaceTabs from "../WorkspaceTabs";
+import ResearchLabModule from "./ResearchLabModule";
 
 import { useEffect, useState } from "react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -13,7 +16,9 @@ const ALERT_CLASS: Record<string, string> = {
   danger: "bg-red-50 text-red-700",
 };
 
-export default function FundModule() {
+export default function FundModule() {return <WorkspaceTabs label="基金与ETF功能" tabs={[{id:"etf-universe",label:"全ETF追踪",content:<EtfTrackerPanel/>},{id:"fund-overview",label:"净值与折溢价",content:<FundOverview/>},{id:"fund-research",label:"基金深研与比较",content:<ResearchLabModule section="基金深研"/>}]}/>;}
+
+function FundOverview() {
   const { t } = useLocale();
   const [code, setCode] = useState("510300");
   const [funds, setFunds] = useState<FundListing[]>([]);

@@ -8,7 +8,6 @@ from datetime import date, timedelta
 import pandas as pd
 import pytest
 
-from app.models import Price, Ticker
 from app.services import screening
 from app.services.screening import StockFactors, compute_stock_factors, rank_universe
 
@@ -223,67 +222,3 @@ def test_rank_universe_missing_factor_excluded_from_average_not_treated_as_zero(
     # only momentum_3m has 2 non-null values -> z = +/-1.0 (pstdev of [0.5,-0.5] is 0.5)
     assert by_symbol["A"]["composite_score"] == pytest.approx(1.0, abs=1e-9)
     assert by_symbol["B"]["composite_score"] == pytest.approx(-1.0, abs=1e-9)
-
-
-# ---- full DB integration: run_screening ranks a real synthetic universe correctly ----
-
-def _long_series(n: int, drift_per_day: float, volume_base: float = 1_000_000.0, volume_drift: float = 0.0) -> list[dict]:
-    base = date(2025, 1, 1)
-    rows = []
-    price = 100.0
-    for i in range(n):
-        price *= 1 + drift_per_day
-        rows.append(
-            {
-                "date": base + timedelta(days=i),
-                "open": price * 0.995,
-                "high": price * 1.01,
-                "low": price * 0.99,
-                "close": price,
-                "volume": volume_base + i * volume_drift,
-            }
-        )
-    return rows
-
-
-async def _seed(session, symbol: str, rows: list[dict]):
-    session.add(Ticker(symbol=symbol, name=f"{symbol} Inc.", market="US"))
-    await session.flush()
-    for r in rows:
-        session.add(Price(ticker_symbol=symbol, trade_date=r["date"], **{k: r[k] for k in ("open", "high", "low", "close", "volume")}))
-    await session.commit()
-
-
-@pytest.mark.asyncio
-async def test_run_screening_ranks_uptrend_above_flat_above_downtrend(db_session):
-    await _seed(db_session, "UP", _long_series(300, 0.003, volume_drift=500))       # steady uptrend, rising volume
-    await _seed(db_session, "FLAT", _long_series(300, 0.0000))                       # no drift
-    await _seed(db_session, "DOWN", _long_series(300, -0.003, volume_drift=500))     # steady downtrend, rising volume
-    await _seed(db_session, "SPY", _long_series(300, 0.003))                          # benchmark, must be excluded
-
-    result = await screening.run_screening(db_session, top_n=10)
-
-    assert result["universe_size"] == 3  # SPY excluded
-    symbols_in_order = [r["symbol"] for r in result["results"]]
-    assert symbols_in_order.index("UP") < symbols_in_order.index("FLAT") < symbols_in_order.index("DOWN")
-    assert "SPY" not in symbols_in_order
-
-    up_row = next(r for r in result["results"] if r["symbol"] == "UP")
-    assert up_row["factors"]["momentum_3m"] > 0
-    assert up_row["factors"]["trend_vs_200ma"] > 0
-
-
-@pytest.mark.asyncio
-async def test_run_screening_persists_stock_scores(db_session):
-    from sqlalchemy import select
-
-    from app.models import StockScore
-
-    await _seed(db_session, "UP", _long_series(300, 0.003))
-    await _seed(db_session, "DOWN", _long_series(300, -0.003))
-
-    await screening.run_screening(db_session, top_n=10)
-
-    rows = (await db_session.execute(select(StockScore))).scalars().all()
-    assert {r.ticker_symbol for r in rows} == {"UP", "DOWN"}
-    assert all(r.method == "zscore_9factor_v1" for r in rows)

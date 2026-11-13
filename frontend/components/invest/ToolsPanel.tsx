@@ -1,4 +1,6 @@
 "use client";
+import WorkspaceTabs from "./WorkspaceTabs";
+import ResearchLabModule from "./modules/ResearchLabModule";
 
 import { useMemo, useState } from "react";
 
@@ -6,7 +8,9 @@ import { getRiskBudget, positionShock, valuationScenarios, type InvestorProfile 
 import { Card, Field, inputClass, Metric, money, ProgressBar } from "./ui";
 import LiveQuotes from "./live-quotes";
 
-export default function ToolsPanel({ profile }: { profile: InvestorProfile }) {
+export default function ToolsPanel({ profile }: { profile: InvestorProfile }){return <WorkspaceTabs label="模拟工具功能" tabs={[{id:"position",label:"仓位与估值",content:<PositionValuationTools profile={profile}/>},{id:"projection",label:"组合概率推演",content:<ResearchLabModule section="组合推演"/>}]}/>;}
+
+function PositionValuationTools({ profile }: { profile: InvestorProfile }) {
   const [positionPct, setPositionPct] = useState(5);
   const [referenceCode, setReferenceCode] = useState("600519");
   const [lossPct, setLossPct] = useState(20);

@@ -16,11 +16,6 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
 
-    # Auth
-    JWT_SECRET: str = "change-me-in-production"
-    JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRES_MIN: int = 60 * 24 * 7  # 7 days
-
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000"
 
@@ -33,10 +28,6 @@ class Settings(BaseSettings):
     DEEPSEEK_MODEL: str = "deepseek-chat"
     LLM_CACHE_TTL_HOURS: int = 24
     NEWS_CACHE_TTL_HOURS: int = 2  # news moves faster than research theses, so cache shorter
-
-    # WxPusher (earnings pipeline WeChat notifications) — optional, unset = push disabled
-    WXPUSHER_APP_TOKEN: str = ""
-    WXPUSHER_UID: str = ""
 
     # Lark/Discord webhooks (backtest + paper-trade notifications) — optional, unset = push disabled
     LARK_WEBHOOK_URL: str = ""

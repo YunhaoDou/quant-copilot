@@ -7,6 +7,11 @@ from app.cycle.live import TZ
 
 
 def setup():
+    # 已建立的实验只读，不因查看目录抢占模拟账户的写锁。
+    with database() as db:
+        if db.execute("SELECT 1 FROM sqlite_master WHERE name='strategy_experiment'").fetchone():
+            row=db.execute("SELECT payload FROM strategy_experiment WHERE id=1").fetchone()
+            if row:return json.loads(row[0])
     cfg=load_config();now=datetime.now(TZ).isoformat()
     with database() as db:
         db.execute("BEGIN IMMEDIATE")

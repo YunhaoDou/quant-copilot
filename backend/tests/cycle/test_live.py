@@ -1,7 +1,4 @@
 """真实源解析与异常语义的离线测试，不依赖外网。"""
-from datetime import datetime
-import json
-
 import httpx
 import pytest
 
@@ -51,7 +48,7 @@ def test_invalid_symbols_rejected():
 
 
 def test_partial_failure_keeps_missing_distinct_from_zero(monkeypatch):
-    fields = ["0"]*40
+    fields = ["0"]*50
     fields[1], fields[3], fields[30], fields[32], fields[33], fields[34], fields[37] = "上证指数", "3000", "20261106100000", "-1", "3100", "2900", "10000"
     quote = 'v_sh000001="' + "~".join(fields) + '";'
     transport = httpx.MockTransport(lambda request: httpx.Response(200, text=quote) if "qt.gtimg.cn" in str(request.url) else httpx.Response(503, text="上游不可用"))
@@ -64,6 +61,35 @@ def test_partial_failure_keeps_missing_distinct_from_zero(monkeypatch):
     assert result["current"]["limit_down"] is None
     assert result["current"]["state"] == "数据不足"
     assert result["metadata"]["warnings"]
+
+
+def _quote_text(**overrides):
+    fields = ["0"]*50
+    fields[1], fields[2], fields[3], fields[30], fields[32], fields[33], fields[34], fields[37] = (
+        "上证指数", "000001", "3000", "20261106100000", "-1", "3100", "2900", "10000",
+    )
+    for index, value in overrides.items():
+        fields[int(index.lstrip("f"))] = value
+    return 'v_sh000001="' + "~".join(fields) + '";'
+
+
+def test_index_parse_delegates_to_market_and_keeps_wan_yuan_amount():
+    # 单一实现：market.parse_quotes 产出的 amount_yuan(元) 在这里换回看板沿用的万元口径。
+    rows = market.parse_quotes(_quote_text())
+    quotes = live.parse_quotes(_quote_text())
+    assert rows[0]["amount_yuan"] == 10000 * 10000
+    assert quotes[0]["amount"] == 10000
+    assert quotes[0]["timestamp"] == rows[0]["quote_time"]
+    assert quotes[0]["price"] == 3000 and quotes[0]["pct"] == -1
+
+
+def test_index_parse_rejects_short_or_incomplete_payload():
+    # 旧 >=38 宽松档不再接受；不完整行情必须硬失败而不是当完整快照。
+    short = 'v_sh000001="' + "~".join(["0"]*40) + '";'
+    with pytest.raises(ValueError, match="字段缺失"):
+        live.parse_quotes(short)
+    with pytest.raises(ValueError, match="字段缺失"):
+        live.parse_quotes(_quote_text(f32=""))  # 缺涨跌幅
 
 
 def test_replay_uses_only_saved_data_and_retains_minutes(tmp_path):

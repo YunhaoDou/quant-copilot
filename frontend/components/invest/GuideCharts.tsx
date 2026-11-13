@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { InvestmentView } from "@/lib/invest-navigation";
+import type { ViewTarget } from "@/lib/invest-navigation";
 import { secondaryButtonClass } from "./ui";
 
 const prices = [
@@ -19,7 +19,7 @@ const chartTypes = [
   { id: "drawdown", name: "从峰值算回撤", ticks: [0, -3, -6, -9, -12], min: -13, max: 0 },
 ] as const;
 
-export default function GuideCharts({ onNavigate }: { onNavigate: (view: InvestmentView) => void }) {
+export default function GuideCharts({ onNavigate }: { onNavigate: (view: ViewTarget, tab?: string) => void }) {
   const [mode, setMode] = useState(0);
   const [selected, setSelected] = useState(5);
   const chart = chartTypes[mode];

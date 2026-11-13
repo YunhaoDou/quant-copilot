@@ -1,4 +1,4 @@
-"""七个独立模拟策略的原生Qt界面。"""
+"""八个独立模拟策略的原生Qt界面。"""
 from html import escape
 import math
 from vnpy.trader.ui import QtCore, QtWidgets
@@ -22,8 +22,9 @@ def report(spec):
     body='<table width="100%"><tr>'+''.join(f'<th>{text(k)}</th>' for k,v in stats)+'</tr><tr>'+''.join(f'<td>{text(v)}</td>' for k,v in stats)+'</tr></table>'
     body+='<h3>策略与边界</h3><p>'+text(spec.get("logic"))+'</p><p>入场：'+text(spec.get("entry"))+'</p><p>退出：'+text(spec.get("exit"))+'</p>'
     body+='<h3>独立模拟持仓</h3>'
-    body+=('<p>'+text(position.get("name"))+' '+text(position.get("symbol"))+' · '+text(position.get("quantity"))+'股 · 参考价 '+money(position.get("mark"))+' · 固定止损 '+money(position.get("stop_loss_price"))+'</p>') if position else '<p>当前空仓。条件不满足或证据不足时不建仓。</p>'
-    if pending:body+='<p>待处理模拟'+('买单' if pending.get("side")=="buy" else '卖单')+'：'+text(pending.get("symbol"))+' · '+text(pending.get("reason"))+'</p>'
+    for p in a.get("positions",{}).values():body+='<p>'+text(p.get("name"))+' '+text(p.get("symbol"))+' · '+text(p.get("quantity"))+'份 · 参考价 '+money(p.get("mark"))+'</p>'
+    body+=('<p>'+text(position.get("name"))+' '+text(position.get("symbol"))+' · '+text(position.get("quantity"))+'股 · 参考价 '+money(position.get("mark"))+' · 固定止损 '+money(position.get("stop_loss_price"))+'</p>') if position else ('<p>当前空仓。条件不满足或证据不足时不建仓。</p>' if not a.get('positions') else '')
+    if pending:body+='<p>待处理模拟计划：'+text(pending.get("symbol"))+' · '+text(pending.get("reason"))+'</p>'
     data=a.get("data") or {}
     if data:body+='<p>全母池 '+text(data.get("pool_total"))+'只 · 日线核验尝试 '+text(data.get("checked"))+'只 · 不足/失败 '+text(len(data.get("failures",[])))+'只 · 更新 '+text(data.get("generated_at"))+'</p>'
     body+='<h3>本轮候选 / 等待原因</h3>'
@@ -48,14 +49,14 @@ class QuantCopilotManager(QtWidgets.QWidget):
     def __init__(self,main_engine,event_engine):
         super().__init__();self.main_engine=main_engine;self.event_engine=event_engine
         self.engine=main_engine.get_engine(APP_NAME)
-        self.setWindowTitle("A股七策略模拟 · Quant Copilot × vn.py 4.5.0");self.resize(1200,850)
+        self.setWindowTitle("A股八策略模拟 · Quant Copilot × vn.py 4.5.0");self.resize(1200,850)
         self.setStyleSheet("QWidget{background:#152720;color:#dfebe5;}QPushButton{padding:8px 15px;background:#244e3c;border:1px solid #44725b;border-radius:5px;}QPushButton:disabled{color:#65796e;}QTabBar::tab{padding:10px;}QTextBrowser{border:0;background:#192e25;}")
         root=QtWidgets.QVBoxLayout(self)
-        title=QtWidgets.QLabel("A股七策略模拟");title.setStyleSheet("font-size:25px;font-weight:bold;color:#8bd4b1;padding:8px;");root.addWidget(title)
+        title=QtWidgets.QLabel("A股八策略模拟");title.setStyleSheet("font-size:25px;font-weight:bold;color:#8bd4b1;padding:8px;");root.addWidget(title)
         note=QtWidgets.QLabel("全部为虚拟账户；真实公开报价为定时快照，非逐笔行情。策略由Quant Copilot常驻服务执行，本窗口不另开交易账本。")
         note.setWordWrap(True);root.addWidget(note)
         self.status_label=QtWidgets.QLabel("正在连接本机模拟服务…");self.status_label.setWordWrap(True);root.addWidget(self.status_label)
-        self.refresh=QtWidgets.QPushButton("刷新七策略状态");self.refresh.clicked.connect(lambda:self.engine.command());root.addWidget(self.refresh)
+        self.refresh=QtWidgets.QPushButton("刷新八策略状态");self.refresh.clicked.connect(lambda:self.engine.command());root.addWidget(self.refresh)
         self.tabs=QtWidgets.QTabWidget();root.addWidget(self.tabs)
         self.pages={};self.buttons=[];self.latest_payload=None;self.rendered_html={}
         self.tabs.currentChanged.connect(self.render_selected)

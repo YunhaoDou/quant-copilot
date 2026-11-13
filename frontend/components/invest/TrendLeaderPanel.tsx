@@ -1,7 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import {useVisiblePoll} from "@/lib/read-resource";
 import { marketApiUrl } from "@/lib/live-market";
-import { Card, buttonClass, secondaryButtonClass, money } from "./ui";
+import { accountStatusText, toAccountView, type TradeView } from "@/lib/account-view";
+import { Card, buttonClass } from "./ui";
+import PaperAccountCard from "./PaperAccountCard";
+import TradeTable, { tradeColumn } from "./TradeTable";
 type Result = { quote: { name: string; code: string; price: number }; moving_averages: Record<string, number>; source: { provider: string; quote_time: string; daily_through: string; fetched_at: string }; missing_evidence: string[]; note: string; result: { decision: string; next_action: string; audit_log_id: string; reasons: { msg: string }[] } };
 type Forward = { account: { status: string; capital: number; cash: number; equity: number; peak: number; last_checked?: string;
   position: {name: string;symbol: string;quantity: number;stop_loss_price?: number}|null;
@@ -25,7 +29,7 @@ export default function TrendLeaderPanel() {
       setForward(value);
     } catch(e) {if(!signal?.aborted)setError(String(e));}
   }
-  useEffect(()=>{const c=new AbortController();load("",c.signal);const timer=setInterval(()=>load("",c.signal),30000);return ()=>{c.abort();clearInterval(timer);};},[]);
+  useVisiblePoll(signal=>load("",signal),30000);
   async function control(action:string) {setActionBusy(true);await load(action);setActionBusy(false);}
   async function query() {
     setBusy(true); setError(""); setData(null);
@@ -36,6 +40,11 @@ export default function TrendLeaderPanel() {
       setData(value); await load();
     } catch(e) {setError(String(e));} finally {setBusy(false);}
   }
+  const account = forward?.account;
+  const accountView = toAccountView(account);
+  const trades: TradeView[] | undefined = account?.trades.slice(-20).reverse().map((row) => ({
+    time: row.time, symbol: row.symbol, side: row.side, price: row.price, quantity: row.quantity,
+  }));
   return <Card><h3 className="text-xl font-semibold">第七策略 · 主线趋势中军波段</h3>
     <p className="mt-2 text-sm leading-7 text-slate-600">主线 → 趋势中军 → 缩量回踩 → 卖点 → 仓位。独立10万元虚拟账户，后台积累真实证据；全部门槛满足后才按后续报价模拟成交。证据不足时保持现金。</p>
     <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm leading-7"><thead><tr><th>对比</th><th>主要差别</th></tr></thead><tbody>
@@ -43,14 +52,21 @@ export default function TrendLeaderPanel() {
       <tr><td className="pr-4">基本面改善后趋势入场</td><td>原策略以盈利改善为前提；本策略以主线资金持续性为前提。</td></tr>
       <tr><td className="pr-4">情绪龙头回补</td><td>原策略跟踪连板及启动—分歧—回补；本策略做趋势波段，不按固定第几天交易。</td></tr>
     </tbody></table></div>
-    <div className="mt-5 border-t pt-4"><h4 className="font-semibold">独立前向模拟 · {forward?.account?.status === "running" ? "运行中" : forward?.account ? "已暂停" : "尚未启动"}</h4>
-      <div className="mt-3 flex flex-wrap gap-2">{[["start","继续第七策略模拟"],["pause","暂停第七策略模拟"],["exit","请求第七策略模拟退出"]].map(([action,label])=><button key={action} disabled={actionBusy} className={secondaryButtonClass} onClick={()=>control(action)}>{label}</button>)}</div>
-      {forward?.account && <>
-        <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">{[["初始虚拟资金",money(forward.account.capital)],["可用现金",money(forward.account.cash)],["参考权益",money(forward.account.equity)],["回撤",`${((1-forward.account.equity/forward.account.peak)*100).toFixed(2)}%`]].map(([label,value])=><div key={label}><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-xl font-semibold">{value}</p></div>)}</div>
-        <p className="mt-3 text-sm">{forward.account.position ? `${forward.account.position.name} ${forward.account.position.symbol} · ${forward.account.position.quantity}股 · 固定止损 ${forward.account.position.stop_loss_price?.toFixed(2) ?? "待核验"}` : "当前空仓；不会为产生交易而放宽规则。"}</p>
-        {forward.account.pending && <p>等待后续报价：{forward.account.pending.side === "buy" ? "模拟买入" : "模拟卖出"} {forward.account.pending.symbol}</p>}
-        <p className="mt-2 text-xs text-slate-500">最近核验 {forward.account.last_checked || "等待首轮后台采集"}</p>
-      </>}
+    <div className="mt-5 border-t pt-4">
+      <PaperAccountCard
+        bare
+        title={`独立前向模拟 · ${accountStatusText(accountView)}`}
+        account={accountView}
+        busy={actionBusy}
+        actions={[
+          { id: "start", label: "继续第七策略模拟", onClick: () => control("start") },
+          { id: "pause", label: "暂停第七策略模拟", onClick: () => control("pause") },
+          { id: "exit", label: "请求第七策略模拟退出", onClick: () => control("exit") },
+        ]}
+        meta={account && <p className="mt-2 text-xs text-slate-500">最近核验 {account.last_checked || "等待首轮后台采集"}</p>}
+        position={account && <p className="mt-3 text-sm">{account.position ? `${account.position.name} ${account.position.symbol} · ${account.position.quantity}股 · 固定止损 ${account.position.stop_loss_price?.toFixed(2) ?? "待核验"}` : "当前空仓；不会为产生交易而放宽规则。"}</p>}
+        pending={account?.pending && <p className="mt-2 text-sm">等待后续报价：{account.pending.side === "buy" ? "模拟买入" : "模拟卖出"} {account.pending.symbol}</p>}
+      />
       <p className="mt-3 text-sm">真实快照 {forward?.capture_count ?? 0} 份 · 覆盖 {forward?.capture_dates.length ?? 0} 个日期 · 跟踪 {forward?.symbols ?? 0} 只</p>
       <p className="mt-1 text-xs text-slate-500">{forward?.scope}</p>
     </div>
@@ -73,8 +89,11 @@ export default function TrendLeaderPanel() {
       {forward?.account?.failures?.map(x=><p className="text-sm text-red-700" key={x}>{x}</p>)}
     </section>
     <section className="mt-5 border-t pt-4"><h4 className="font-semibold">模拟成交记录</h4>
-      {!forward?.account?.trades.length && <p className="mt-2 text-sm text-slate-500">尚无成交。历史统计不代表未来。</p>}
-      {forward?.account?.trades.slice(-20).reverse().map((row,i)=><p className="mt-2 text-sm" key={i}>{row.time} · {row.side === "buy" ? "模拟买入" : "模拟卖出"} {row.symbol} · {row.quantity}股 × {row.price.toFixed(3)}</p>)}
+      <TradeTable
+        rows={trades}
+        emptyText="尚无成交。历史统计不代表未来。"
+        columns={[tradeColumn("time"), tradeColumn("symbol"), tradeColumn("side"), tradeColumn("price"), tradeColumn("quantity")]}
+      />
       <h4 className="mt-4 font-semibold">判断日志</h4>{forward?.account?.decisions.slice(-8).reverse().map((row,i)=><p key={i} className="mt-2 text-xs leading-6 text-slate-500">{row.time} · {row.text}</p>)}
     </section>
     <ul className="mt-5 list-disc pl-5 text-xs leading-6 text-slate-500">{forward?.limitations.map(x=><li key={x}>{x}</li>)}</ul>

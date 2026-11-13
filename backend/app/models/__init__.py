@@ -8,7 +8,6 @@ from app.models.paper import PaperAccount, PaperOrder, PaperPosition
 from app.models.price import Price
 from app.models.research_note import ResearchNote
 from app.models.sim import SimEquity
-from app.models.stock_score import StockScore
 from app.models.strategy import Strategy
 from app.models.ticker import Ticker
 
@@ -20,7 +19,6 @@ __all__ = [
     "Fund",
     "FundNav",
     "FundFlowSignal",
-    "StockScore",
     "Strategy",
     "BacktestRun",
     "BacktestCurve",
