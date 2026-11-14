@@ -1,5 +1,6 @@
 "use client";
 import {useCallback,useEffect,useRef,useState} from "react";
+import {pollingDelay} from "./polling-delay";
 
 type Entry={data:unknown;etag:string|null;updated:number};
 const cache=new Map<string,Entry>();
@@ -27,21 +28,24 @@ function acquire<T>(url:string,force=false){
 }
 
 /** 一次请求完成后再计时；隐藏标签页暂停；同URL合并；旧响应不会覆盖新查询。 */
-export function useReadResource<T>(url:string|null,interval:number|((data:T|null)=>number)=15000){
+export function useReadResource<T>(url:string|null,interval:number|((data:T|null)=>number)=15000,options:{backoff?:boolean;clearOnChange?:boolean;clearOnError?:boolean;revalidateOnVisible?:boolean}={}){
  const [data,setData]=useState<T|null>(null),[error,setError]=useState(""),[errorStatus,setErrorStatus]=useState<number|null>(null),[loading,setLoading]=useState(false),[revision,setRevision]=useState(0);
  const intervalRef=useRef(interval);intervalRef.current=interval;
+ const optionsRef=useRef(options);optionsRef.current=options;
  const refresh=useCallback(()=>setRevision(v=>v+1),[]);
  useEffect(()=>{
   if(!url)return;
+  if(optionsRef.current.clearOnChange){setData(null);setError("");setErrorStatus(null);}
+  let failures=0,hasStarted=false;
   let active=true,busy=false,timer:ReturnType<typeof setTimeout>|undefined,release:(()=>void)|undefined;
   async function run(){
    if(!active||busy||document.hidden)return;
-   busy=true;setLoading(true);let result:T|null=null;
-   try{const task=acquire<T>(url!,revision>0);release=task.release;result=await task.promise;if(active){setData(result);setError("");setErrorStatus(null);}}
-   catch(e){if(active&&!(e instanceof DOMException&&e.name==="AbortError")){setError(String(e));setErrorStatus(e instanceof ReadError?e.status:null);}}
-   finally{release?.();release=undefined;busy=false;if(active){setLoading(false);const fn=intervalRef.current,delay=typeof fn==="function"?fn(result):fn;if(delay>0)timer=setTimeout(run,delay);}}
+   hasStarted=true;busy=true;setLoading(true);let result:T|null=null;
+   try{const task=acquire<T>(url!,revision>0);release=task.release;result=await task.promise;failures=0;if(active){setData(result);setError("");setErrorStatus(null);}}
+   catch(e){if(active&&!(e instanceof DOMException&&e.name==="AbortError")){failures++;setError(String(e));setErrorStatus(e instanceof ReadError?e.status:null);if(optionsRef.current.clearOnError)setData(null);}}
+   finally{release?.();release=undefined;busy=false;if(active){setLoading(false);const fn=intervalRef.current,base=typeof fn==="function"?fn(result):fn,delay=pollingDelay(base,failures,!!optionsRef.current.backoff);if(delay>0)timer=setTimeout(run,delay);}}
   }
-  function visible(){if(timer)clearTimeout(timer);if(!document.hidden)run();}
+  function visible(){if(timer)clearTimeout(timer);if(!document.hidden&&(!hasStarted||optionsRef.current.revalidateOnVisible!==false))run();}
   document.addEventListener("visibilitychange",visible);run();
   return()=>{active=false;if(timer)clearTimeout(timer);release?.();document.removeEventListener("visibilitychange",visible);};
  },[url,revision]);

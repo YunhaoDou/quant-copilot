@@ -33,19 +33,19 @@ async def list_tickers(request: Request, session: AsyncSession = Depends(get_ses
     from app.cycle.all_a import saved
     from app.cycle.etf_universe import saved as etf_saved
     from app.cycle import read_cache,events
-    universe,_=await asyncio.to_thread(read_cache.document,events.DB_PATH,"all_a_universe")
+    universe,universe_version=await asyncio.to_thread(read_cache.document,events.DB_PATH,"all_a_universe")
     if not universe:raise HTTPException(503,"官方全A股名单尚未就绪，请更新全市场数据")
     result=await session.execute(select(Ticker))
     stored={t.symbol.split('.')[0]:t for t in result.scalars()}
     suffix={"SH":"SS","SZ":"SZ","BJ":"BJ"}
-    etfs,_=await asyncio.to_thread(read_cache.document,events.DB_PATH,"etf_universe")
+    etfs,etf_version=await asyncio.to_thread(read_cache.document,events.DB_PATH,"etf_universe")
     # 编码完整7300只列表在线程中完成，保留旧数组契约，避免阻塞其他请求。
     def encode():
         from app.cycle.read_cache import response
         rows=[dict(symbol=stock["code"]+"."+suffix[stock["exchange"]],name=stock["name"],market="CN",asset_type=stock.get("asset_type","STOCK"),
             last_synced_at=stored[stock["code"]].last_synced_at.isoformat() if stock["code"] in stored and stored[stock["code"]].last_synced_at else None,
             data_status="stored" if stock["code"] in stored else "按需读取真实日线") for stock in [*universe["stocks"],*(etfs or {}).get("rows",[])]]
-        return response(rows,request)
+        return response(rows,request,("tickers",universe_version,etf_version,tuple(sorted((k,v.last_synced_at.isoformat() if v.last_synced_at else None) for k,v in stored.items()))))
     return await asyncio.to_thread(encode)
 
 

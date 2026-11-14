@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { api, getApiUrl, type FundFlowSignal, type NewsSentiment } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import {useReadResource,useDebouncedValue} from "@/lib/read-resource";
 import { toSixDigit } from "@/lib/symbols";
 import CompanyKline from "../CompanyKline";
 import LiveQuotes from "../live-quotes";
@@ -29,19 +30,19 @@ export default function TickerModule() {
   const [symbol, setSymbol] = useState("600519.SS");
   const [status, setStatus] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
-  const [universe, setUniverse] = useState<{ symbol: string; name: string }[]>([]);
+  const [search,setSearch]=useState(""),[page,setPage]=useState(1),[assetType,setAssetType]=useState("all");
+  const query=useDebouncedValue(search);
+  type Security={symbol:string;name:string;asset_type:string};
+  type SearchResult={rows:Security[];selected:Security|null;total:number;matched:number;stock_total:number;etf_total:number|null;notes:string[]};
+  const params=new URLSearchParams({query,page:String(page),asset_type:assetType,selected:symbol});
+  const securities=useReadResource<SearchResult>(`${getApiUrl()}/tickers/search?${params}`,60000);
+  const universe=securities.data?.rows||[];
+  const selected=securities.data?.selected;
+  const pageCount=Math.max(1,Math.ceil((securities.data?.matched||0)/50));
   const [fundFlow, setFundFlow] = useState<FundFlowSignal | null>(null);
   const [fundFlowError, setFundFlowError] = useState("");
   const [news, setNews] = useState<NewsSentiment | null>(null);
   const [newsError, setNewsError] = useState("");
-
-  // load universe list on mount
-  useEffect(() => {
-    fetch(`${getApiUrl()}/tickers`)
-      .then((r) => r.json())
-      .then((list: any[]) => setUniverse(list.filter((row) => row.market === "CN").map((row) => ({ symbol: row.symbol, name: row.asset_type==="ETF"?`${row.name} [ETF]`:row.name }))))
-      .catch(() => {});
-  }, []);
 
   // the canonical <CompanyKline> reads live candles itself; ingest only feeds the
   // stored history used by backtests/screening, so nothing here needs the old
@@ -62,10 +63,12 @@ export default function TickerModule() {
   useEffect(() => {
     setFundFlow(null);
     setFundFlowError("");
+    let active=true;
     api
       .getFundFlow(symbol.toUpperCase())
-      .then(setFundFlow)
-      .catch((e) => setFundFlowError(String(e)));
+      .then(value=>{if(active)setFundFlow(value);})
+      .catch((e) => {if(active)setFundFlowError(String(e));});
+    return()=>{active=false;};
   }, [symbol, refreshTick]);
 
   // news sentiment likewise follows the selected symbol, and re-fetches on language switch
@@ -73,10 +76,12 @@ export default function TickerModule() {
   useEffect(() => {
     setNews(null);
     setNewsError("");
+    let active=true;
     api
       .getNewsSentiment(symbol.toUpperCase(), locale)
-      .then(setNews)
-      .catch((e) => setNewsError(String(e)));
+      .then(value=>{if(active)setNews(value);})
+      .catch((e) => {if(active)setNewsError(String(e));});
+    return()=>{active=false;};
   }, [symbol, locale, refreshTick]);
 
   const code = toSixDigit(symbol);
@@ -87,17 +92,21 @@ export default function TickerModule() {
       <div className="flex flex-wrap items-end gap-4 mb-6">
         <LiveQuotes codes={code ? [code] : []} />
         <h1 className="mt-5 text-2xl font-medium">{t("ticker.title")}</h1>
-        <div className="flex gap-2 items-end">
+        <div className="flex flex-wrap gap-2 items-end">
+          <label className="text-sm">搜索全市场<input aria-label="搜索股票与ETF" placeholder="证券代码或名称" className="block rounded border px-2 py-1.5" value={search} onChange={e=>{setSearch(e.target.value);setPage(1);}}/></label>
+          <label className="text-sm">证券类型<select aria-label="证券类型" className="block rounded border px-2 py-1.5" value={assetType} onChange={e=>{setAssetType(e.target.value);setPage(1);}}><option value="all">股票与ETF</option><option value="STOCK">股票</option><option value="ETF">ETF</option></select></label>
           <label className="text-sm">
             {t("ticker.symbol")}
             <select
-              className="border rounded px-2 py-1.5 block min-w-28"
+              disabled={securities.loading||query!==search}
+              aria-label="选择股票或ETF"
+              className="border rounded px-2 py-1.5 block min-w-28 max-w-full"
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
             >
-              {universe.length === 0 && <option value="600519.SS">600519 · 贵州茅台</option>}
+              {!universe.some(row=>row.symbol===symbol)&&<option value={symbol}>{symbol} · {selected?.name||"当前选择"}{selected?.asset_type==="ETF"?" [ETF]":""}</option>}
               {universe.map((u) => (
-                <option key={u.symbol} value={u.symbol}>{u.symbol} · {u.name}</option>
+                <option key={u.symbol} value={u.symbol}>{u.symbol} · {u.name}{u.asset_type==="ETF"?" [ETF]":""}</option>
               ))}
             </select>
           </label>
@@ -108,6 +117,15 @@ export default function TickerModule() {
             {t("ticker.reload")}
           </button>
         </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+        <span>完整名单 {securities.data?.total??"未知"} 只 · 匹配 {securities.data?.matched??"未知"} 只 · 第{page}/{pageCount}页</span>
+        <button aria-label="证券名单上一页" disabled={page<=1||securities.loading} onClick={()=>setPage(p=>p-1)}>上一页</button>
+        <button aria-label="证券名单下一页" disabled={page>=pageCount||securities.loading} onClick={()=>setPage(p=>p+1)}>下一页</button>
+        {securities.loading&&<span role="status">正在查询完整母池…</span>}
+        {securities.error&&<span role="alert" className="text-amber-800">证券名单读取失败：{securities.error}</span>}
+        {securities.data?.notes.map(note=><span key={note}>{note}</span>)}
       </div>
 
       {status && <p className="text-sm text-gray-500 mb-4">{status}</p>}

@@ -4,6 +4,7 @@ from pathlib import Path
 import copy
 import json
 import sqlite3
+from contextlib import closing
 
 import httpx
 
@@ -30,7 +31,7 @@ def connect():
 
 
 def config():
-    with connect() as c:
+    with closing(connect()) as c, c:
         row = c.execute("SELECT payload FROM config WHERE id=1").fetchone()
     result = copy.deepcopy(DEFAULTS)
     if row:
@@ -83,13 +84,13 @@ def save_config(changes):
             raise ValueError("模型地址必须是无凭据的HTTP(S)地址")
     cfg["cache_ttl"] = max(0, min(3600, int(cfg["cache_ttl"])))
     cfg["history_max"] = max(1, min(1000, int(cfg["history_max"])))
-    with connect() as c:
+    with closing(connect()) as c, c:
         c.execute("INSERT OR REPLACE INTO config VALUES (1,?)", (json.dumps(cfg),))
     return public_config()
 
 
 def save_report(payload, legacy_key=None):
-    with connect() as c:
+    with closing(connect()) as c, c:
         cursor = c.execute("INSERT OR IGNORE INTO reports (kind,code,name,created_at,payload,legacy_key) VALUES (?,?,?,?,?,?)", (payload["kind"], payload.get("code", ""), payload.get("name", ""), datetime.now(TZ).isoformat(), json.dumps(payload, ensure_ascii=False, allow_nan=False), legacy_key))
         if not cursor.rowcount:
             return c.execute("SELECT id FROM reports WHERE legacy_key=?", (legacy_key,)).fetchone()[0]
@@ -97,12 +98,12 @@ def save_report(payload, legacy_key=None):
 
 
 def reports(code=""):
-    with connect() as c:
+    with closing(connect()) as c, c:
         return [dict(r) for r in c.execute("SELECT id,kind,code,name,created_at FROM reports WHERE code LIKE ? ORDER BY id DESC LIMIT ?", ("%" + code + "%", config()["history_max"]))]
 
 
 def report(rid):
-    with connect() as c:
+    with closing(connect()) as c, c:
         row = c.execute("SELECT payload FROM reports WHERE id=?", (rid,)).fetchone()
         if not row:
             raise ValueError("档案不存在")
@@ -110,12 +111,12 @@ def report(rid):
 
 
 def chats(rid):
-    with connect() as c:
+    with closing(connect()) as c, c:
         return [dict(r) for r in c.execute("SELECT role,content,created_at FROM chats WHERE report_id=? ORDER BY rowid", (rid,))]
 
 
 def clear(rid=None, chat_only=False):
-    with connect() as c:
+    with closing(connect()) as c, c:
         c.execute("DELETE FROM chats" + (" WHERE report_id=?" if rid is not None else ""), (rid,) if rid is not None else ())
         if not chat_only:
             c.execute("DELETE FROM reports" + (" WHERE id=?" if rid is not None else ""), (rid,) if rid is not None else ())
@@ -150,7 +151,7 @@ def ask(rid, question):
     prompt = "你是中文投资研究助手。只引用所给事实，明确数据日期、假设与缺项，不预测必涨，不承诺收益，不自动交易。\n" + json.dumps(context, ensure_ascii=False)[:22000]
     history = [{"role": r["role"], "content": r["content"]} for r in chats(rid)[-12:]]
     answer = complete([{"role": "user", "content": prompt}, {"role": "assistant", "content": "我将区分事实与假设。"}, *history, {"role": "user", "content": question}])
-    with connect() as c:
+    with closing(connect()) as c, c:
         for role, content in (("user", question), ("assistant", answer["content"])):
             c.execute("INSERT INTO chats VALUES (?,?,?,?)", (rid, role, content, datetime.now(TZ).isoformat()))
     return answer

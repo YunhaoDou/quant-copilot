@@ -1,5 +1,5 @@
 // 真实本地快照的只读交互回归，不启停或重置模拟账户。
-const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');const assert=require('node:assert/strict');
+const {chromium}=require('./scripts/test-browser.cjs');const assert=require('node:assert/strict');
 (async()=>{const b=await chromium.launch({channel:'chrome'});try{const p=await b.newPage({viewport:{width:1440,height:1000}});p.setDefaultTimeout(20000);const errors=[],requests=[];p.on('pageerror',e=>errors.push(e.message));p.on('request',r=>{if(r.url().includes(':8000/'))requests.push(r.url());});
 const go=q=>p.goto('http://localhost:3000/invest?'+q,{waitUntil:'domcontentloaded'});
 const total=(await (await p.request.get('http://localhost:8000/dividends/summary')).json()).total;const pages=Math.ceil(total/50);

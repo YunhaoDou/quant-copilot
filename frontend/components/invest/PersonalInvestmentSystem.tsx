@@ -14,6 +14,7 @@ import {
 } from "@/lib/invest-navigation";
 
 import LiveQuotes from "./live-quotes";
+import ServiceConnection from "./ServiceConnection";
 import WorkspaceTabs from "./WorkspaceTabs";
 import { usePersonalInvestment } from "./usePersonalInvestment";
 import { fetchCompanyInfo } from "@/lib/company-data";
@@ -133,6 +134,7 @@ export default function PersonalInvestmentSystem() {
             </div>
           </div>
         </header>
+        <ServiceConnection />
 
         <nav className="mt-4 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200/80 bg-white/90 p-1.5 shadow-[0_8px_30px_rgba(15,23,42,0.04)] backdrop-blur lg:hidden">
           {INVESTMENT_VIEWS.map((item) => (

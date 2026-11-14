@@ -76,6 +76,13 @@ async def _seed_tickers() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.cycle.engine import load_config
+    from app.cycle.read_cache import configure_limits
+    from app.cycle.resources import configure
+    from app.cycle.market import configure_cache
+    configure_cache(load_config())
+    configure(load_config())
+    configure_limits(load_config())
     await init_models()
     await _seed_strategies()
     await _seed_tickers()
@@ -131,6 +138,8 @@ app.include_router(dividend_router)
 app.include_router(research_lab_router)
 app.include_router(radar_router)
 app.include_router(companies_router)
+from app.cycle.security_search import router as security_search_router
+app.include_router(security_search_router)
 app.include_router(tickers.router)
 app.include_router(backtest.router)
 app.include_router(research.router)

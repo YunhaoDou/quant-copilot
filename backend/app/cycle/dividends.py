@@ -8,6 +8,7 @@ import copy
 import json
 import re
 import sqlite3
+from contextlib import closing
 
 from fastapi import APIRouter, Request
 
@@ -88,7 +89,7 @@ def scan():
         from app.cycle.full_market import scan as full_scan
         payload=full_scan(update)
         DB_PATH.parent.mkdir(parents=True,exist_ok=True)
-        with sqlite3.connect(DB_PATH) as db:
+        with closing(sqlite3.connect(DB_PATH)) as db, db:
             db.execute("CREATE TABLE IF NOT EXISTS board (id INTEGER PRIMARY KEY,payload TEXT NOT NULL)")
             db.execute("INSERT OR REPLACE INTO board VALUES (1,?)",(json.dumps(payload,ensure_ascii=False,allow_nan=False),))
         update(**payload)
@@ -99,7 +100,7 @@ def scan():
 def board():
     with _lock:
         if _state["status"] == "idle" and DB_PATH.exists():
-            with sqlite3.connect(DB_PATH) as db:
+            with closing(sqlite3.connect(DB_PATH)) as db, db:
                 row = db.execute("SELECT payload FROM board WHERE id=1").fetchone()
                 if row:
                     _state.update(json.loads(row[0]))

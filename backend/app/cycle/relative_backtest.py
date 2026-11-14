@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import vectorbt as vbt
 
 STRATEGY_KEY = "relative_trend_ashare"
 LABEL = "相对强势趋势（A股规则回测）"
@@ -64,6 +63,7 @@ def run_relative_trend(
     entries = entries.fillna(False).astype(bool)
     exits = exits.fillna(False).astype(bool)
 
+    import vectorbt as vbt
     portfolio = vbt.Portfolio.from_signals(
         close, entries, exits, init_cash=init_cash, fees=fees, freq="1D"
     )

@@ -44,7 +44,7 @@ async def _run_comparison(symbol: str, start: str | None = None, end: str | None
             if end:
                 close = close[close.index <= end]
 
-            results = backtest_engine.run_comparison(close)
+            results = await asyncio.to_thread(backtest_engine.run_comparison,close)
             for r in results:
                 run = BacktestRun(
                     ticker_symbol=symbol,

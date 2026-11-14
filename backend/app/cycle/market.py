@@ -14,6 +14,7 @@ import httpx
 import pandas as pd
 
 from app.cycle.live import TZ, number
+from app.cycle.resources import resource_slot,background_task
 from app.cycle.engine import load_config
 
 router = APIRouter(prefix="/market", tags=["真实行情"])
@@ -23,7 +24,20 @@ _lock = Lock()
 _quote_flights={}
 _daily_flights={}
 _daily_bytes=0
-_quote_slots=BoundedSemaphore(6)
+_daily_budget=128*1024*1024
+
+def configure_cache(config):
+    global _daily_budget,_daily_bytes
+    with _lock:
+        _daily_budget=int(config.get('market_daily_cache_mb',128))*1024*1024
+        _daily_bytes=sum(item[2] for item in _daily_cache.values())
+        while _daily_bytes>_daily_budget and _daily_cache:
+            oldest=_daily_cache.pop(next(iter(_daily_cache)));_daily_bytes-=oldest[2]
+
+
+def cache_stats():
+    with _lock:return {'daily_bytes':sum(item[2] for item in _daily_cache.values()),'daily_budget':_daily_budget,'daily_entries':len(_daily_cache),'quote_entries':len(_cache)}
+
 
 QUOTE_URL = "https://qt.gtimg.cn/q="
 # 严格档：腾讯对个股和指数都返回 47 个以上字段；要求 PE(f39)/PB(f46) 一定存在，
@@ -57,7 +71,8 @@ def fetch_quote_rows(codes, client):
     `codes` 为已归一化的腾讯代码（`normalize_symbol` 的输出或 `sh`/`sz`/`bj` + 六位）。
     `cycle/live.py` 用注入 transport 的 client 调它，从而只保留一份抓取+解析实现。
     """
-    response = client.get(QUOTE_URL + ",".join(codes))
+    with resource_slot("quotes"):
+        response = client.get(QUOTE_URL + ",".join(codes))
     response.raise_for_status()
     return parse_quotes(response.content.decode("gb18030", errors="replace"))
 
@@ -89,7 +104,7 @@ def fetch_quotes(symbols):
                 pending[code]=f
     if owned:
         try:
-            with _quote_slots:
+            with resource_slot("quotes"):
                 with httpx.Client(trust_env=False,timeout=cfg["live_timeout_seconds"]) as client:rows=fetch_quote_rows(owned,client)
             stamp=datetime.now(TZ).isoformat();lookup={r["symbol"]:r for r in rows};now=monotonic()
             with _lock:
@@ -110,7 +125,7 @@ def quote_batches(symbols,workers=4):
     """仅改变批次并行度；保留100个/批和缺失标记，给交互/持仓查询预留请求容量。"""
     codes=sorted(set(symbols));quotes={};failures=[]
     with ThreadPoolExecutor(max_workers=min(4,max(1,workers))) as pool:
-        jobs={pool.submit(fetch_quotes,codes[i:i+100]):codes[i:i+100] for i in range(0,len(codes),100)}
+        jobs={pool.submit(background_task(fetch_quotes),codes[i:i+100]):codes[i:i+100] for i in range(0,len(codes),100)}
         for job in as_completed(jobs):
             try:quotes.update({q["code"]:q for q in job.result()["quotes"]})
             except Exception as exc:failures.append(dict(codes=jobs[job],error=str(exc)[:150]))
@@ -129,14 +144,16 @@ def fetch_daily(symbol,count=640,adjust="qfq"):
         if owner:future=Future();_daily_flights[key]=future
     if not owner:return future.result().copy()
     try:
-        frame=_fetch_daily_uncached(symbol,count,adjust)
+        with resource_slot("daily"):
+            frame=_fetch_daily_uncached(symbol,count,adjust)
         size=int(frame.memory_usage(index=True,deep=True).sum())
         with _lock:
             if not _daily_cache:_daily_bytes=0
             previous=_daily_cache.pop(key,None)
             if previous:_daily_bytes-=previous[2]
-            _daily_cache[key]=(monotonic(),frame,size);_daily_bytes+=size
-            while _daily_bytes>128*1024*1024 and len(_daily_cache)>1:
+            if size<=_daily_budget:
+                _daily_cache[key]=(monotonic(),frame,size);_daily_bytes+=size
+            while _daily_bytes>_daily_budget and _daily_cache:
                 oldest=_daily_cache.pop(next(iter(_daily_cache)));_daily_bytes-=oldest[2]
             _daily_flights.pop(key,None);future.set_result(frame)
         return frame.copy()

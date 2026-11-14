@@ -7,6 +7,7 @@ from threading import Lock
 from fastapi import APIRouter, HTTPException, Query, Request
 import numpy as np
 
+from app.cycle.resources import background_task
 from app.cycle.engine import load_config
 from app.cycle.events import database, encode
 from app.cycle.live import TZ, number
@@ -206,6 +207,7 @@ def refresh_signals():
             results={row[0]:json.loads(row[1]) for row in db.execute("SELECT symbol,payload FROM research_daily_cache WHERE as_of=?",(today,)) if row[0] in allowed}
         failures = []
         _refresh.update(checked=len(results))
+        @background_task
         def collect(stock):
             frame = fetch_daily(stock["code"], 100)
             frame = frame[frame.trade_date < today].sort_values("trade_date")
@@ -278,6 +280,10 @@ def _run_accounts():
     symbols = sorted({stock["code"] for _, account, package in packages if account and account["status"] == "running" and package for stock in package["stocks"]})
     if not symbols:
         return
+    urgent=sorted({p.get('symbol') for _,a,_ in packages if a and a.get('status')=='running' for p in [a.get('position') or {},a.get('pending') or {}] if p.get('symbol')})
+    if urgent:
+        try:fetch_quotes(urgent)
+        except Exception:pass  # 完整批次仍会重试；失败不填充报价。
     quotes,_quote_failures=quote_batches(symbols,config["research_scan_workers"])
     now = datetime.now(TZ)
     for name, account, package in packages:

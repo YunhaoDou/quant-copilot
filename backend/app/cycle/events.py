@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 import json
 import sqlite3
+from contextlib import closing
 import uuid
 from threading import Lock
 
@@ -22,7 +23,7 @@ _initialized=set()
 def database(path=None):
     path = path or DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path, timeout=15) as db:
+    with closing(sqlite3.connect(path, timeout=15)) as db, db:
         db.row_factory = sqlite3.Row
         identity=(str(path.resolve()),path.stat().st_ino)
         if identity not in _initialized:

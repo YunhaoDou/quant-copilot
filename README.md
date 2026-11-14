@@ -175,3 +175,10 @@ quant-copilot/
 ## License
 
 [MIT](LICENSE)
+
+## 性能与只读验收
+
+系统设置的“运行与性能”可查看缓存、行情资源和数据源授权状态。
+在项目目录执行 `backend/.venv/bin/python backend/scripts/verify_system.py` 可运行统一验收；不调用AI、不操作真实交易。外部IOPV用例需显式选择，未授权源保持关闭。
+
+实现、复跑方式及实测限制见 [最终优化记录](docs/performance-final.md) 和 [性能待办](docs/performance-todo.md)。

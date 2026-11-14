@@ -15,6 +15,7 @@ import copy
 import json
 import math
 import sqlite3
+from contextlib import closing
 
 import httpx
 
@@ -101,7 +102,7 @@ def parse_tencent_minutes(payload, code, name, expected_date):
 
 def store_snapshot(snapshot, fetched_at, path=DB_PATH, details=None):
     path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path, timeout=10) as db:
+    with closing(sqlite3.connect(path, timeout=10)) as db, db:
         db.execute("CREATE TABLE IF NOT EXISTS snapshots (observed_at TEXT PRIMARY KEY, payload TEXT NOT NULL)")
         db.execute("INSERT OR REPLACE INTO snapshots VALUES (?, ?)", (fetched_at, json.dumps(snapshot, ensure_ascii=False, allow_nan=False)))
         db.execute("CREATE TABLE IF NOT EXISTS snapshot_details (observed_at TEXT PRIMARY KEY, payload TEXT NOT NULL)")
@@ -112,7 +113,7 @@ def store_snapshot(snapshot, fetched_at, path=DB_PATH, details=None):
 def read_history(limit, cutoff=None, path=DB_PATH):
     if not path.exists():
         return []
-    with sqlite3.connect(path, timeout=10) as db:
+    with closing(sqlite3.connect(path, timeout=10)) as db, db:
         query = "SELECT observed_at,payload FROM snapshots"
         args = []
         if cutoff:
@@ -127,7 +128,7 @@ def read_history(limit, cutoff=None, path=DB_PATH):
 def captured_dates(path=DB_PATH):
     if not path.exists():
         return []
-    with sqlite3.connect(path, timeout=10) as db:
+    with closing(sqlite3.connect(path, timeout=10)) as db, db:
         return [r[0] for r in db.execute("SELECT DISTINCT substr(observed_at,1,10) FROM snapshots ORDER BY 1")]
 
 
@@ -139,7 +140,7 @@ def replay_dashboard(config, as_of, path=DB_PATH):
     current = history[-1] if history else None
     details = {}
     if current and path.exists():
-        with sqlite3.connect(path, timeout=10) as db:
+        with closing(sqlite3.connect(path, timeout=10)) as db, db:
             exists = db.execute("SELECT 1 FROM sqlite_master WHERE name='snapshot_details'").fetchone()
             row = db.execute("SELECT payload FROM snapshot_details WHERE observed_at=?", (current["observed_at"],)).fetchone() if exists else None
             details = json.loads(row[0]) if row else {}

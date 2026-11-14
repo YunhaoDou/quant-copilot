@@ -3,7 +3,6 @@ import itertools
 
 import numpy as np
 import pandas as pd
-import vectorbt as vbt
 
 from app.services.strategies import STRATEGIES
 
@@ -20,6 +19,7 @@ def run_single(close: pd.Series, strategy_key: str, params: dict | None = None) 
     merged_params = {**spec["default_params"], **(params or {})}
 
     entries, exits = spec["fn"](close, **merged_params)
+    import vectorbt as vbt
     pf = vbt.Portfolio.from_signals(close, entries, exits, init_cash=100_000.0, fees=0.001, freq="1D")
 
     return {

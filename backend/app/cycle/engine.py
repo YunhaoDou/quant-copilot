@@ -24,6 +24,10 @@ def _validated_config(path,mtime,size):
         raise ValueError("ETF刷新或SHIBOR规则配置不合法")
     if any(config[k]<0 for k in ("shibor_cost_bps","shibor_slippage_bps","shibor_min_commission")) or not 0<=config["shibor_initial_dividend_pct"]<=100:
         raise ValueError("SHIBOR模拟成本或初始配置不合法")
+    for key in ('read_cache_document_mb','read_cache_model_mb','read_cache_body_mb','market_daily_cache_mb'):
+        if not isinstance(config.get(key),int) or not 1<=config[key]<=4096:raise ValueError("缓存预算需为1至4096MiB")
+    if not all(isinstance(config.get(k),int) for k in ('market_quote_slots','market_daily_slots','market_background_slots')) or not all(2<=config[k]<=16 for k in ('market_quote_slots','market_daily_slots')) or not 1<=config['market_background_slots']<min(config['market_quote_slots'],config['market_daily_slots']):
+        raise ValueError("行情并发需保留至少一个交互槽位，且不超过16")
     positive = ["market_new_low_lookback_days", "intraday_stop_fall_bars", "intraday_bar_minutes", "sector_start_limit_up_count", "mock_days", "lot_size", "initial_capital"]
     if any(not isinstance(config[k], int) or config[k] <= 0 for k in positive):
         raise ValueError("窗口、样本数、手数与本金必须为正整数")

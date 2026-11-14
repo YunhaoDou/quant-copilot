@@ -4,10 +4,10 @@ Each strategy function takes a close-price Series and returns (entries, exits) b
 Series suitable for vbt.Portfolio.from_signals.
 """
 import pandas as pd
-import vectorbt as vbt
 
 
 def sma_crossover(close: pd.Series, fast: int = 10, slow: int = 30):
+    import vectorbt as vbt
     fast_ma = vbt.MA.run(close, fast)
     slow_ma = vbt.MA.run(close, slow)
     entries = fast_ma.ma_crossed_above(slow_ma)
@@ -16,6 +16,7 @@ def sma_crossover(close: pd.Series, fast: int = 10, slow: int = 30):
 
 
 def rsi_reversion(close: pd.Series, window: int = 14, low: int = 30, high: int = 70):
+    import vectorbt as vbt
     rsi = vbt.RSI.run(close, window)
     entries = rsi.rsi_crossed_above(low)
     exits = rsi.rsi_crossed_above(high)
@@ -30,6 +31,7 @@ def momentum(close: pd.Series, lookback: int = 20, threshold: float = 0.0):
 
 
 def bollinger_reversion(close: pd.Series, window: int = 20, num_std: float = 2.0):
+    import vectorbt as vbt
     bb = vbt.BBANDS.run(close, window=window, alpha=num_std)
     entries = (close < bb.lower).fillna(False)
     exits = (close > bb.middle).fillna(False)

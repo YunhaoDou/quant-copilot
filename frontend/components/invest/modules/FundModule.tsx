@@ -18,6 +18,8 @@ const ALERT_CLASS: Record<string, string> = {
 
 export default function FundModule() {return <WorkspaceTabs label="基金与ETF功能" tabs={[{id:"etf-universe",label:"全ETF追踪",content:<EtfTrackerPanel/>},{id:"fund-overview",label:"净值与折溢价",content:<FundOverview/>},{id:"fund-research",label:"基金深研与比较",content:<ResearchLabModule section="基金深研"/>}]}/>;}
 
+const sourceErrorLabels:Record<string,string>={timeout:"请求超时",rate_limited:"源端限流",connection_error:"连接中断",http_error:"接口错误",invalid_response:"响应不完整",code_mismatch:"证券代码不匹配",invalid_price:"价格无效"};
+
 function FundOverview() {
   const { t } = useLocale();
   const [code, setCode] = useState("510300");
@@ -96,6 +98,7 @@ function FundOverview() {
 
       {analysis && (
         <>
+          {analysis.premium_status && analysis.premium_status.state!=="available" && <p role="status" className="mt-4 text-sm text-amber-800">{analysis.premium_status.message}{analysis.premium_status.category&&` · ${sourceErrorLabels[analysis.premium_status.category]||"数据源异常"}`}</p>}
           {analysis.premium && (
             <div className={`mt-8 rounded-lg px-4 py-3 text-sm ${ALERT_CLASS[analysis.premium.alert_level]}`}>
               <div className="font-medium">
@@ -103,7 +106,7 @@ function FundOverview() {
                 {analysis.premium.price.toFixed(3)} / IOPV {analysis.premium.iopv.toFixed(3)})
               </div>
               <div className="mt-0.5">{analysis.premium.alert_message}</div>
-              <div className="mt-1 text-xs">IOPV快照时间：{analysis.premium.quote_time ? new Date(analysis.premium.quote_time).toLocaleString("zh-CN") : "供应商未提供"}，点击加载可重新获取。</div>
+              <div className="mt-1 text-xs">{analysis.premium.provider||"公开源"} · IOPV快照时间：{analysis.premium.quote_time ? new Date(analysis.premium.quote_time).toLocaleString("zh-CN") : "供应商未提供"}，点击加载可重新获取。<span className="block">同供应商备用节点不代表独立来源核验；价格与IOPV来自同一响应，不跨源拼接。{analysis.premium.fetched_at&&`采集：${new Date(analysis.premium.fetched_at).toLocaleString("zh-CN")}`}</span></div>
             </div>
           )}
 

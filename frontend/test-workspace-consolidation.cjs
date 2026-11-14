@@ -1,7 +1,7 @@
 // 使用独立临时浏览器验证「6 个工作流页面」的整合；不调用AI、通知、下单或账户启停接口。
 // 页面映射：decision(驾驶舱/复盘) · market(雷达/周期) · research(红利/观察池/研究)
 //           trade(策略/模拟工具/回测/手动模拟/档案) · data(行情/选股/基金) · help(指南/设置/合规)
-const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const {chromium}=require('./scripts/test-browser.cjs');
 const assert=require('node:assert/strict');
 const current=(p)=>new URL(p.url()).searchParams;
 (async()=>{const b=await chromium.launch({channel:'chrome'});try{

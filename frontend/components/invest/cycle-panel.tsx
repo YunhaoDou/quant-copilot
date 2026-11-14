@@ -5,6 +5,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { Card, Metric, Field, inputClass, buttonClass, money } from "./ui";
 import { navigateInvestmentView } from "@/lib/invest-navigation";
 import CycleEventsPanel from "./CycleEventsPanel";
+import {useReadResource} from "@/lib/read-resource";
 import { marketApiUrl } from "@/lib/live-market";
 
 type Leader = { symbol: string; name: string; sector: string; boards: number; pct: number | null; first_limit_time: string | null; last_limit_time?: string | null; seal_ratio: number | null; breaks: number | null };
@@ -22,7 +23,9 @@ function Chart({ rows, x, fields }: { rows: object[]; x: string; fields: { key: 
 
 export default function CyclePanel({ onResearch }: { onResearch: (code: string) => Promise<void> }) {
   const [tab, setTab] = useState(0), [source, setSource] = useState("akshare"), [date, setDate] = useState(""), [pattern, setPattern] = useState("启动龙头"), [horizon, setHorizon] = useState(2);
-  const [result, setResult] = useState<Result | null>(null), [error, setError] = useState(""), [loading, setLoading] = useState(true), [reload, setReload] = useState(0);
+  const params=new URLSearchParams({source,pattern,horizon:String(horizon),...(date?{as_of:date}:{})});
+  const resource=useReadResource<Result>(`${marketApiUrl()}/cycle?${params}`,data=>source==="akshare"&&!date?(data?.metadata?.refresh_seconds||30)*1000:0,{backoff:true,clearOnChange:true,clearOnError:true,revalidateOnVisible:source==="akshare"&&!date});
+  const result=resource.data,error=resource.error,loading=resource.loading;
   useEffect(() => { const value = new URLSearchParams(window.location.search).get("cycleTab"); if (value === "events") setTab(5); if (value === "simulation") navigateInvestmentView("trade",undefined,{tab:"strategies",strategy:"leader-rebound"}); }, []);
   function selectTab(index: number) {
     setTab(index);
@@ -33,23 +36,6 @@ export default function CyclePanel({ onResearch }: { onResearch: (code: string) 
   }
   const [asset, setAsset] = useState("sh000001"), [reviews, setReviews] = useState<Review[]>([]), [override, setOverride] = useState("待确认"), [reason, setReason] = useState(""), [saveError, setSaveError] = useState("");
   useEffect(() => { try { const saved = JSON.parse(localStorage.getItem("quant-cycle-reviews-v1") || "[]"); if (Array.isArray(saved)) setReviews(saved); } catch { setSaveError("本地复盘记录无法读取，请检查浏览器存储。"); } }, []);
-  useEffect(() => {
-    const controller = new AbortController(); let active = true, busy = false; let timer: ReturnType<typeof setTimeout>;
-    setResult(null); setError("");
-    const refresh = async () => {
-      if (!active || busy) return; busy = true; setLoading(true);
-      let delay = 30;
-      try {
-        const params = new URLSearchParams({ source, pattern, horizon: String(horizon), ...(date ? { as_of: date } : {}) });
-        const r = await fetch(`${marketApiUrl()}/cycle?${params}`, { signal: controller.signal, cache: "no-store" });
-        const body = await r.json(); if (!r.ok) throw new Error(body.detail || "数据读取失败");
-        if (active) { setResult(body); setError(""); delay = body.metadata?.refresh_seconds || 30; }
-      } catch (e) { if (active && !controller.signal.aborted) { setError(e instanceof Error ? e.message : String(e)); setResult(null); } }
-      finally { busy = false; if (active) { setLoading(false); if (source === "akshare" && !date) timer = setTimeout(refresh, delay*1000); } }
-    };
-    refresh();
-    return () => { active = false; controller.abort(); clearTimeout(timer); };
-  }, [source, date, pattern, horizon, reload]);
   const [showAllSectors, setShowAllSectors] = useState(false);
   const current = result?.current;
   const live = source === "akshare";
@@ -62,13 +48,13 @@ export default function CyclePanel({ onResearch }: { onResearch: (code: string) 
   return <div className="space-y-5">
     <Card className="!bg-[#173f2c] !text-white [&_label>span]:!text-emerald-100">
       <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs tracking-[.18em] text-emerald-200">情绪 · 主线 · 梯队</p><h2 className="mt-2 text-2xl font-semibold">情绪周期与龙头监控</h2><p className="mt-2 text-sm text-white/65">先看市场承接，再看板块共振；用证据记录每一次判断。</p></div><span className="rounded-full border border-amber-200/30 bg-amber-100/10 px-3 py-2 text-xs text-amber-100">{source === "mock" ? "模拟演示数据 · 非真实行情" : source === "csv" ? "CSV导入 · 用户提供" : "真实公开行情 · 定时刷新"}</span></div>
-      <div className="mt-5 grid gap-3 sm:grid-cols-3"><Field label="数据源"><select className={inputClass} value={source} onChange={e => { setSource(e.target.value); setDate(""); setAsset(e.target.value === "mock" ? "INDEX" : "sh000001"); }}><option value="mock">离线模拟</option><option value="csv">本地CSV</option><option value="akshare">真实行情（腾讯 / 东方财富）</option></select></Field><Field label="历史回放 · 选择已采集日期"><input type="date" className={inputClass} value={date} onChange={e => setDate(e.target.value)} /></Field><div className="flex items-end"><button className="rounded-xl border border-white/30 px-4 py-2.5 text-sm" onClick={() => { setDate(""); setReload(n => n + 1); }}>返回当前 / 刷新</button></div></div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-3"><Field label="数据源"><select className={inputClass} value={source} onChange={e => { setSource(e.target.value); setDate(""); setAsset(e.target.value === "mock" ? "INDEX" : "sh000001"); }}><option value="mock">离线模拟</option><option value="csv">本地CSV</option><option value="akshare">真实行情（腾讯 / 东方财富）</option></select></Field><Field label="历史回放 · 选择已采集日期"><input type="date" className={inputClass} value={date} onChange={e => setDate(e.target.value)} /></Field><div className="flex items-end"><button className="rounded-xl border border-white/30 px-4 py-2.5 text-sm" onClick={() => { setDate(""); resource.refresh(); }}>返回当前 / 刷新</button></div></div>
     </Card>
     <nav className="flex flex-wrap gap-2" aria-label="情绪周期页签">{tabs.map((name, i) => <button key={name} aria-pressed={tab === i} onClick={() => selectTab(i)} className={`rounded-xl px-4 py-2.5 text-sm ${tab === i ? "bg-[#173f2c] text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{name}</button>)}</nav>
     {tab === 5 && <CycleEventsPanel onResearch={onResearch} />}
     <a className="inline-flex text-sm font-medium text-emerald-800 underline" href="/invest?view=trade&tab=strategies&strategy=leader-rebound">打开情绪龙头回补模拟账户</a>
     {tab < 5 && loading && <Card>{live ? "正在获取真实行情…" : "正在计算可用时间以内的信号…"}</Card>}
-    {tab < 5 && error && <Card><p className="text-red-700">数据源不可用：{error}</p><p className="mt-2 text-sm text-slate-500">请检查行情服务连接，或稍后重试。系统不会自动替换为模拟数据。</p><button className={`${buttonClass} mt-3`} onClick={() => setReload(n => n + 1)}>重试</button></Card>}
+    {tab < 5 && error && <Card><p className="text-red-700">数据源不可用：{error}</p><p className="mt-2 text-sm text-slate-500">请检查行情服务连接，或稍后重试。系统不会自动替换为模拟数据。</p><button className={`${buttonClass} mt-3`} onClick={() => resource.refresh()}>重试</button></Card>}
     {tab < 5 && !loading && result && !current && <Card>该时点没有已采集的快照。{result.dates.length ? `可用采集日期：${result.dates.join("、")}` : "请先返回当前行情开始采集。"}<button className={`${buttonClass} mt-3 block`} onClick={() => setDate("")}>返回当前行情</button></Card>}
     {tab < 5 && result?.metadata && <Card><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold">{result.metadata.replay ? "历史快照" : result.metadata.stale ? "行情已过期" : "真实行情已连接"} · {result.metadata.session}</h3><span className="text-xs text-slate-500">{result.metadata.replay ? "回放期间暂停自动刷新" : `${result.metadata.refresh_seconds}秒自动刷新`}</span></div><div className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-3"><p>供应商行情：{result.metadata.quote_time ? new Date(result.metadata.quote_time).toLocaleString("zh-CN") : "早期快照未保存"}</p><p>本机获取：{new Date(result.metadata.fetched_at).toLocaleString("zh-CN")}</p><p>{result.metadata.replay ? "所选时点的历史记录" : `指数距今：${result.metadata.quote_age_seconds}秒`} · 股票池秒级延迟未知</p></div><div className="mt-3 flex flex-wrap gap-2">{result.metadata.indices.map(q => <span className="rounded-lg bg-slate-50 px-3 py-2 text-sm" key={q.symbol}>{q.name} {q.price} · {pct(q.pct)}</span>)}</div>{result.metadata.warnings.map(w => <p className="mt-2 text-xs leading-5 text-amber-700" key={w}>{w}</p>)}</Card>}
     {tab < 5 && current && result && <>

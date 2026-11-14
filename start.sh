@@ -10,6 +10,8 @@ BACKEND_DIR="$ROOT/backend"
 FRONTEND_DIR="$ROOT/frontend"
 LOGDIR="$BACKEND_DIR/logs"
 mkdir -p "$LOGDIR"
+source "$ROOT/scripts/service-lock.sh"
+quant_lock_acquire "$LOGDIR/stack-start.lock"
 
 # ---- helpers ----
 running() { lsof -i ":$1" -sTCP:LISTEN -t >/dev/null 2>&1; }
@@ -45,16 +47,20 @@ start_backend() {
         .venv/bin/pip install -e ".[dev]" -q
     fi
     if running 8000; then
-        echo "  uvicorn already running on :8000 — skip"
+        echo "  API端口已监听，核验数据库与Redis就绪状态"
+    elif launchctl print "gui/$(id -u)/com.quantcopilot.resident" >/dev/null 2>&1; then
+        # 已注册驻留服务时只唤起同一实例，避免与launchd同时启动第二个后端。
+        start_component "等待既有后台服务恢复"
+        launchctl kickstart "gui/$(id -u)/com.quantcopilot.resident" || true
     else
         start_component "starting uvicorn"
-        .venv/bin/uvicorn app.main:app --port 8000 > "$LOGDIR/uvicorn.log" 2>&1 &
-        for i in $(seq 1 15); do
-            running 8000 && break
-            sleep 1
-        done
-        running 8000 && echo "  uvicorn ready" || echo "  !! uvicorn failed to start — check $LOGDIR/uvicorn.log"
+        nohup .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 > "$LOGDIR/uvicorn.log" 2>&1 < /dev/null &
     fi
+    if ! .venv/bin/python "$ROOT/scripts/wait-api.py" --timeout 60; then
+        echo "  后台未就绪，停止启动流程；请检查 $LOGDIR/" >&2
+        return 1
+    fi
+    echo "  API与依赖已就绪"
 
     # Celery worker
     if pgrep -f "celery.*worker" >/dev/null 2>&1; then
@@ -91,14 +97,14 @@ start_frontend() {
 summary() {
     echo ""
     echo "=============================="
-    echo " Quant Copilot is running"
+    echo " Quant Copilot services ready"
     echo "=============================="
     echo "  Frontend : http://localhost:3000"
     echo "  Backend  : http://localhost:8000/docs"
     echo "  Logs     : $LOGDIR/"
     echo ""
     if running 8000 && running 3000; then
-        curl -sf http://localhost:8000/health >/dev/null 2>&1 \
+        "$BACKEND_DIR/.venv/bin/python" "$ROOT/scripts/wait-api.py" --timeout 2 >/dev/null 2>&1 \
             && echo "  Health   : OK" \
             || echo "  Health   : backend not healthy"
     fi

@@ -1,8 +1,9 @@
 "use client";
 import WorkspaceTabs from "./WorkspaceTabs";
 import LiveAllocation from "./modules/live-allocation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
+import {useReadResource} from "@/lib/read-resource";
 import { marketApiUrl } from "@/lib/live-market";
 import { navigateInvestmentView } from "@/lib/invest-navigation";
 import { getRiskBudget, makeId, MarketTheme, PersonalInvestmentState, PolicyEvidence } from "@/lib/personal-investment";
@@ -22,19 +23,20 @@ export default function MarketRadarPanel({state,setState}:Props){return <Workspa
 
 function MarketEnvironment({state,setState}:Props){
  const [showKline,setShowKline]=useState(false);
- const [data,setData]=useState<Radar|null>(null),[error,setError]=useState(""),[loading,setLoading]=useState(true),[reload,setReload]=useState(0);
+ const resource=useReadResource<Radar>(`${marketApiUrl()}/market/radar`,data=>(data?.refresh_seconds||30)*1000,{backoff:true,clearOnError:true});
+ const data=resource.data,error=resource.error,loading=resource.loading;
  const [theme,setTheme]=useState<Omit<MarketTheme,"id">>(emptyTheme),[themeId,setThemeId]=useState<string|null>(null),[showTheme,setShowTheme]=useState(false),[themeError,setThemeError]=useState(""),[filter,setFilter]=useState("全部");
  const [evidence,setEvidence]=useState<Omit<PolicyEvidence,"id">>(emptyEvidence),[evidenceId,setEvidenceId]=useState<string|null>(null),[showEvidence,setShowEvidence]=useState(false),[evidenceError,setEvidenceError]=useState("");
  const risk=getRiskBudget(state.profile),trend=data?.trend,breadth=data?.sectors,sentiment=data?.sentiment,policies=state.policyEvidence||[];
  const priority={关注:0,待核实:1,排除:2};
  const candidates=state.marketThemes.filter(t=>filter==="全部"||(t.status||"待核实")===filter).sort((a,b)=>priority[a.status||"待核实"]-priority[b.status||"待核实"]||(b.updatedAt||"").localeCompare(a.updatedAt||""));
- useEffect(()=>{let active=true,timer:ReturnType<typeof setTimeout>;const controller=new AbortController();async function load(){setLoading(true);let delay=30;try{const r=await fetch(`${marketApiUrl()}/market/radar`,{signal:controller.signal,cache:"no-store"});const p=await r.json();if(!r.ok)throw new Error(p.detail||"市场数据不可用");if(active){setData(p);setError("");delay=p.refresh_seconds||30;}}catch(e){if(active&&!controller.signal.aborted){setData(null);setError(String(e));}}finally{if(active){setLoading(false);timer=setTimeout(load,delay*1000);}}}load();return()=>{active=false;controller.abort();clearTimeout(timer);};},[reload]);
+
  function saveTheme(){if(!theme.name.trim()){setThemeError("请填写候选方向名称。");return;}const item={...theme,name:theme.name.trim(),id:themeId||makeId("theme"),updatedAt:new Date().toISOString()};setState(s=>({...s,marketThemes:themeId?s.marketThemes.map(t=>t.id===themeId?item:t):[...s.marketThemes,item]}));setShowTheme(false);setThemeId(null);setThemeError("");}
  function saveEvidence(){if(!evidence.title.trim()||!evidence.publishedAt||!evidence.sourceName.trim()||!evidence.facts.trim()||!httpUrl(evidence.sourceUrl)){setEvidenceError("请填写标题、发布日期、来源、原文事实和有效HTTP(S)链接。");return;}const item={...evidence,id:evidenceId||makeId("evidence")};setState(s=>({...s,policyEvidence:evidenceId?(s.policyEvidence||[]).map(p=>p.id===evidenceId?item:p):[item,...(s.policyEvidence||[])]}));setShowEvidence(false);setEvidenceId(null);setEvidenceError("");}
  return <div className="space-y-5">
-  <Card className="!bg-[#10281d] !text-white"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs tracking-widest text-emerald-200/80">MARKET RADAR · 市场与证据</p><h2 className="mt-2 text-2xl font-semibold">市场发生了什么，哪些证据还缺失？</h2><p className="mt-2 text-sm leading-6 text-white/65">先看数据与范围，再记录政策和产业证据；无需手工打分。</p></div><button disabled={loading} className="rounded-xl border border-white/25 px-4 py-2 text-sm disabled:opacity-50" onClick={()=>setReload(v=>v+1)}>{loading?"正在更新…":"刷新市场数据"}</button></div><p className="mt-5 text-xs text-emerald-100/70">{data?.session||"等待真实数据"} · 仓位约束统一来自驾驶舱</p></Card>
+  <Card className="!bg-[#10281d] !text-white"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs tracking-widest text-emerald-200/80">MARKET RADAR · 市场与证据</p><h2 className="mt-2 text-2xl font-semibold">市场发生了什么，哪些证据还缺失？</h2><p className="mt-2 text-sm leading-6 text-white/65">先看数据与范围，再记录政策和产业证据；无需手工打分。</p></div><button disabled={loading} className="rounded-xl border border-white/25 px-4 py-2 text-sm disabled:opacity-50" onClick={()=>resource.refresh()}>{loading?"正在更新…":"刷新市场数据"}</button></div><p className="mt-5 text-xs text-emerald-100/70">{data?.session||"等待真实数据"} · 仓位约束统一来自驾驶舱</p></Card>
   <Card className={risk.stage.background}><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs text-slate-500">驾驶舱风险约束 · 同一账户数据与规则</p><h3 className="mt-2 text-lg font-semibold">{risk.stage.level} · 当前回撤 {risk.drawdownPct.toFixed(1)}%</h3><p className="mt-2 text-sm leading-6">{risk.stage.instruction}</p><p className="mt-2 text-xs text-slate-500">剩余风险预算 {money(risk.remaining)} · 资产及峰值在驾驶舱维护，市场数据不改变风险约束。</p></div><button className={secondaryButtonClass} onClick={()=>navigateInvestmentView("dashboard")}>查看驾驶舱</button></div></Card>
-  {error&&<Card><p role="alert" className="text-sm text-red-700">市场数据读取失败：{error}</p><p className="mt-2 text-xs text-slate-500">数据保持未知，不生成分数或演示行情。你的证据和候选仍可编辑。</p><button className={`${secondaryButtonClass} mt-3`} onClick={()=>setReload(v=>v+1)}>重试市场数据</button></Card>}
+  {error&&<Card><p role="alert" className="text-sm text-red-700">市场数据读取失败：{error}</p><p className="mt-2 text-xs text-slate-500">数据保持未知，不生成分数或演示行情。你的证据和候选仍可编辑。</p><button className={`${secondaryButtonClass} mt-3`} onClick={()=>resource.refresh()}>重试市场数据</button></Card>}
   {data&&<p className="text-xs leading-6 text-slate-400">上证参考报价时间 {time(data.quote_time)} · 本机获取 {time(data.fetched_at)} · {data.refresh_seconds}秒刷新{data.stale?" · 报价过期，请复核":""}</p>}
   <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-4">
    <Card><p className="text-xs font-semibold text-emerald-700">01 · 趋势事实</p><h3 className="mt-2 font-semibold">沪深300ETF（510300）</h3><p className="mt-4 text-3xl font-semibold">{trend?trend.close.toFixed(3):"未知"}</p><div className="mt-4 space-y-2 text-xs text-slate-500">{([20,60,200] as const).map(n=>{const ma=trend?.[`ma${n}`];return <p key={n} className="flex justify-between gap-2"><span>{n}日均线</span><span>{ma!=null&&trend?`${ma.toFixed(3)} · 价格${trend.close>=ma?"在上方":"在下方"}`:"历史不足 / 未知"}</span></p>;})}</div><p className="mt-4 text-[11px] leading-5 text-slate-400">腾讯前复权完整日线 · 截至 {trend?.date||"未知"}。宽基ETF样本不作牛熊判断。</p><button className="mt-3 text-xs text-emerald-700 underline" onClick={()=>setShowKline(v=>!v)}>{showKline?"收起趋势K线":"展开趋势K线"}</button></Card>

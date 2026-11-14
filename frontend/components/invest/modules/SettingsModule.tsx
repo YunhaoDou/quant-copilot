@@ -1,4 +1,5 @@
 "use client";
+import RuntimeStatusPanel from "../RuntimeStatusPanel";
 import WorkspaceTabs from "../WorkspaceTabs";
 import ResearchLabModule from "./ResearchLabModule";
 
@@ -8,7 +9,7 @@ import { api, getApiUrl, setApiUrl } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { navigateInvestmentView } from "@/lib/invest-navigation";
 
-export default function SettingsModule() {return <WorkspaceTabs label="系统设置功能" tabs={[{id:"connection",label:"连接与缓存",content:<ConnectionSettings/>},{id:"models",label:"模型与通知",content:<ResearchLabModule section="模型与通知"/>}]}/>;}
+export default function SettingsModule() {return <WorkspaceTabs label="系统设置功能" tabs={[{id:"connection",label:"连接与缓存",content:<ConnectionSettings/>},{id:"runtime",label:"运行与性能",content:<RuntimeStatusPanel/>},{id:"models",label:"模型与通知",content:<ResearchLabModule section="模型与通知"/>}]}/>;}
 
 // 模型/LLM 配置（供应商、密钥、模型、LLM 缓存、通知）只在「模型与通知」页签维护（ResearchLabModule → /research-lab/config）。
 function goToModels() {

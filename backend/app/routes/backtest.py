@@ -1,4 +1,5 @@
 """Backtest endpoints (M3): 4-strategy comparison + parameter sweep."""
+import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -42,7 +43,7 @@ async def sweep(req: SweepRequest):
     if close.empty:
         raise HTTPException(status_code=404, detail="no price data ingested for this symbol yet")
     try:
-        results = backtest_engine.run_param_sweep(close, req.strategy_key, req.param_grid)
+        results = await asyncio.to_thread(backtest_engine.run_param_sweep,close,req.strategy_key,req.param_grid)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"symbol": req.symbol, "strategy_key": req.strategy_key, "results": results}

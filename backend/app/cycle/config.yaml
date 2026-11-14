@@ -99,5 +99,12 @@
   "shibor_limit_pct": {
     "512890": 10,
     "159915": 20
-  }
+  },
+  "read_cache_document_mb": 96,
+  "read_cache_model_mb": 192,
+  "read_cache_body_mb": 32,
+  "market_quote_slots": 6,
+  "market_daily_slots": 6,
+  "market_background_slots": 4,
+  "market_daily_cache_mb": 128
 }

@@ -52,3 +52,13 @@ frontend/.next*/
 backend/logs/frontend-release.json
 backend/logs/frontend-release.json.tmp
 backend/logs/frontend.pid
+
+# 本机性能基准与启动测量（不上传运行证据）
+backend/logs/performance-*.json
+backend/logs/performance-*.tmp
+backend/logs/restart-*.json
+backend/logs/account-*.json
+
+backend/logs/*-start.lock/
+backend/logs/verification-*.json
+backend/logs/verification-*.tmp

@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from app.cycle.events import database, encode
 from app.cycle.live import TZ
+from app.cycle.resources import background_task
 from app.cycle.engine import load_config
 from app.cycle.market import fetch_daily, fetch_quotes
 
@@ -41,6 +42,7 @@ def scan(update):
             cached={r[0]:json.loads(r[1]) for r in db.execute("SELECT code,payload FROM full_stock_bars WHERE bucket=?",(bucket,))}
         quotes={};failures=[]
         codes=[s["code"] for s in stocks]
+        @background_task
         def quote_batch(batch):return fetch_quotes(batch)["quotes"]
         with ThreadPoolExecutor(max_workers=cfg["research_scan_workers"]) as pool:
             tasks={pool.submit(quote_batch,codes[n:n+100]):codes[n:n+100] for n in range(0,total,100)}
@@ -48,6 +50,7 @@ def scan(update):
                 try:quotes.update({q["code"]:q for q in f.result()})
                 except Exception as exc:failures.append("报价批次"+tasks[f][0]+"："+str(exc)[:100])
         factors=[];output=[]
+        @background_task
         def collect(stock):
             code=stock["code"];errors=[]
             raw=cached.get(code)

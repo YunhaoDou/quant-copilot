@@ -235,7 +235,9 @@ export type FundAnalysis = {
     win_rate: number;
     window_days: number;
   };
+  premium_status?: {state:string;message:string;category?:string};
   premium: {
+    provider?:string;source_url?:string|null;fetched_at?:string|null;
     quote_time?: string | null;
     price: number;
     iopv: number;

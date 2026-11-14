@@ -6,6 +6,8 @@ realtime spot table rather than reconstructed from daily history — a same-day 
 merge would need T+1 alignment handling for QDII funds, which this MVP skips.
 """
 from dataclasses import dataclass
+import asyncio
+from time import monotonic
 
 import pandas as pd
 import httpx
@@ -36,6 +38,10 @@ class PremiumSnapshot:
     alert_level: str
     alert_message: str
     quote_time: str | None = None
+    provider: str = "东方财富"
+    source_url: str | None = None
+    fetched_at: str | None = None
+    source_attempts: list | None = None
 
 
 def _assess_alert(premium_rate: float) -> tuple[str, str]:
@@ -50,35 +56,60 @@ def _assess_alert(premium_rate: float) -> tuple[str, str]:
     return LEVEL_NORMAL, f"Premium/discount normal ({premium_rate:+.2f}%)"
 
 
+class PremiumSourceError(RuntimeError):
+    """可解释的源端失败；不将失败转换为零溢价。"""
+    def __init__(self,category,attempts):
+        self.category=category;self.attempts=attempts
+        super().__init__("IOPV公开源暂不可用，请稍后重试")
+
+
+PREMIUM_NODES=("https://push2.eastmoney.com","https://82.push2.eastmoney.com")
+
+
 def get_premium_snapshot(code: str, fund_type: str) -> PremiumSnapshot | None:
-    """Live premium/discount for an ETF/LOF. Returns None if IOPV isn't published for it."""
+    """同一响应配对价格与IOPV；最多两个同供应商节点，不拼接跨源数据。"""
     from app.cycle.market import normalize_symbol
-    from app.cycle.live import number, TZ
+    from app.cycle.live import number,TZ
     from datetime import datetime
-    symbol = normalize_symbol(code)
-    secid = ("1." if symbol.startswith("sh") else "0.")+code
-    with httpx.Client(trust_env=False, timeout=8) as client:
-        response = client.get("https://push2.eastmoney.com/api/qt/ulist.np/get", params={"secids":secid, "fltt":2, "fields":"f12,f14,f2,f441,f124"})
-        response.raise_for_status()
-        rows = (response.json().get("data") or {}).get("diff", [])
-    if not rows:
-        return None
-    r = rows[0]
-    iopv, price = number(r.get("f441")), number(r.get("f2"))
-    if iopv is None or iopv <= 0 or price is None:
-        return None
-    premium_rate = round((price - iopv) / iopv * 100, 4) if iopv else 0.0
-    level, message = _assess_alert(premium_rate)
-    return PremiumSnapshot(
-        code=code,
-        name=str(r["f14"]),
-        price=price,
-        iopv=iopv,
-        premium_rate=premium_rate,
-        alert_level=level,
-        alert_message=message,
-        quote_time=datetime.fromtimestamp(r["f124"], TZ).isoformat() if r.get("f124") else None,
-    )
+    symbol=normalize_symbol(code)
+    code=symbol[2:]
+    secid=("1." if symbol.startswith("sh") else "0.")+code
+    attempts=[];started=monotonic()
+    with httpx.Client(trust_env=False,timeout=httpx.Timeout(2,connect=1)) as client:
+        for node in PREMIUM_NODES:
+            if monotonic()-started>=6:break
+            url=node+"/api/qt/ulist.np/get"
+            try:
+                response=client.get(url,params={"secids":secid,"fltt":2,"fields":"f12,f14,f2,f441,f124"})
+                response.raise_for_status();body=response.json()
+                if not isinstance(body,dict) or not isinstance(body.get("data"),dict):raise ValueError("invalid_response")
+                rows=body["data"].get("diff")
+                if not isinstance(rows,list):raise ValueError("invalid_response")
+                if not rows:return None
+                row=next((r for r in rows if isinstance(r,dict) and str(r.get("f12"))==code),None)
+                if row is None:raise ValueError("code_mismatch")
+                iopv,price=number(row.get("f441")),number(row.get("f2"))
+                if iopv is None or iopv<=0:return None
+                if price is None or price<=0:raise ValueError("invalid_price")
+                stamp=row.get("f124")
+                quote_time=datetime.fromtimestamp(float(stamp),TZ).isoformat() if stamp else None
+                rate=round((price-iopv)/iopv*100,4);level,message=_assess_alert(rate)
+                attempts.append({"url":url,"status":"ok"})
+                return PremiumSnapshot(code=code,name=str(row.get("f14") or code),price=price,iopv=iopv,
+                    premium_rate=rate,alert_level=level,alert_message=message,quote_time=quote_time,
+                    source_url=url,fetched_at=datetime.now(TZ).isoformat(),source_attempts=attempts)
+            except httpx.TimeoutException:category="timeout"
+            except httpx.HTTPStatusError as exc:
+                category="rate_limited" if exc.response.status_code==429 else "http_error"
+                attempts.append({"url":url,"status":category,"http_status":exc.response.status_code})
+                if category=="rate_limited":break
+                continue
+            except httpx.DecodingError:category="invalid_response"
+            except httpx.RequestError:category="connection_error"
+            except (ValueError,TypeError,OverflowError) as exc:
+                category=str(exc) if str(exc) in ("code_mismatch","invalid_price") else "invalid_response"
+            attempts.append({"url":url,"status":category})
+    raise PremiumSourceError(attempts[-1]["status"] if attempts else "timeout",attempts)
 
 
 def compute_metrics(nav_series: pd.Series) -> dict:
@@ -127,8 +158,15 @@ async def get_fund_analysis(session: AsyncSession, code: str, fund_type: str) ->
     metrics = compute_metrics(nav_series)
 
     premium = None
+    premium_status={"state":"not_applicable","message":"该基金类型不适用场内IOPV折溢价"}
     if fund_type in ("ETF", "LOF"):
-        snapshot = get_premium_snapshot(code, fund_type)
+        try:
+            snapshot=await asyncio.wait_for(asyncio.to_thread(get_premium_snapshot,code,fund_type),timeout=7)
+            premium_status={"state":"available" if snapshot else "missing","message":"已读取同一响应的价格与IOPV" if snapshot else "供应商未提供有效IOPV，保留未知，不以历史净值替代"}
+        except PremiumSourceError as exc:
+            snapshot=None;premium_status={"state":"unavailable","category":exc.category,"attempts":exc.attempts,"message":str(exc)}
+        except asyncio.TimeoutError:
+            snapshot=None;premium_status={"state":"unavailable","category":"timeout","message":"IOPV读取超时，已保留净值指标；可稍后重试"}
         if snapshot:
             premium = {
                 "price": snapshot.price,
@@ -137,6 +175,8 @@ async def get_fund_analysis(session: AsyncSession, code: str, fund_type: str) ->
                 "alert_level": snapshot.alert_level,
                 "alert_message": snapshot.alert_message,
                 "quote_time": snapshot.quote_time,
+                "provider":snapshot.provider,"source_url":snapshot.source_url,
+                "fetched_at":snapshot.fetched_at,"source_attempts":snapshot.source_attempts,
             }
 
-    return {"code": code, "fund_type": fund_type, "metrics": metrics, "premium": premium}
+    return {"code": code, "fund_type": fund_type, "metrics": metrics, "premium": premium,"premium_status":premium_status}

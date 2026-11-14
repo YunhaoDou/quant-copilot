@@ -1,33 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import dynamic from "next/dynamic";
+const LegacySimChart=dynamic(()=>import("./LegacySimChart"),{loading:()=> <p role="status" className="py-8 text-sm text-slate-500">正在载入净值图表…</p>});
 
 import { api, type LegacySimCurve, type LegacySimReport, type LegacySimStanding } from "@/lib/api";
 import { navigateInvestmentView } from "@/lib/invest-navigation";
 import { Card, secondaryButtonClass } from "./ui";
 
-const LINE_COLORS = ["#0f766e", "#2563eb", "#d97706", "#9333ea", "#b91c1c"];
 const money = (n: number) => n.toLocaleString("zh-CN", { style: "currency", currency: "CNY", maximumFractionDigits: 2 });
 const pct = (n: number | null | undefined) => (n == null ? "—" : `${n > 0 ? "+" : ""}${n.toFixed(2)}%`);
 const pctClass = (n: number | null | undefined) =>
   n == null ? "text-slate-400" : n > 0 ? "text-emerald-700" : n < 0 ? "text-rose-700" : "text-slate-600";
-
-function curveKey(account: string) {
-  return account.replace(/^sim-/, "");
-}
-
-function buildChartData(curves: LegacySimCurve[]) {
-  const byDate = new Map<string, Record<string, number | string>>();
-  for (const curve of curves) {
-    for (const point of curve.series) {
-      const row = byDate.get(point.date) ?? { date: point.date };
-      row[curveKey(curve.account)] = point.equity;
-      byDate.set(point.date, row);
-    }
-  }
-  return [...byDate.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-}
 
 /** 遗留美股策略模拟：4 个旧 vectorbt 模板 + SPY 基准，只读展示，不改账户、不下单。 */
 export default function LegacySimSection() {
@@ -62,8 +46,7 @@ export default function LegacySimSection() {
     return [...report.strategies, ...(report.benchmark ? [report.benchmark] : [])];
   }, [report]);
 
-  const labelOf = (account: string) => rows.find((row) => row.account === account)?.label ?? account;
-  const chartData = useMemo(() => buildChartData(curves), [curves]);
+  const hasChartData=curves.some(curve=>curve.series.length>0);
   const curveAccounts = curves.map((curve) => curve.account);
   const chosen = selected ? rows.find((row) => row.account === selected) ?? null : null;
   const lastDate = curveAccounts.length
@@ -133,32 +116,7 @@ export default function LegacySimSection() {
                 </div>
                 <button className={secondaryButtonClass} onClick={() => setSelected(null)}>收起</button>
               </div>
-              {chartData.length ? (
-                <div className="mt-4 h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={40} />
-                      <YAxis tick={{ fontSize: 10 }} domain={["auto", "auto"]} />
-                      <Tooltip />
-                      <Legend formatter={(value) => labelOf(`sim-${value}`)} />
-                      {curveAccounts.map((account, index) => (
-                        <Line
-                          key={account}
-                          type="monotone"
-                          dataKey={curveKey(account)}
-                          name={curveKey(account)}
-                          stroke={LINE_COLORS[index % LINE_COLORS.length]}
-                          strokeWidth={account === chosen.account ? 2.5 : 1.2}
-                          dot={false}
-                        />
-                      ))}
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <p className="mt-3 text-sm text-slate-500">该账户还没有净值记录。</p>
-              )}
+              {hasChartData ? <LegacySimChart curves={curves} rows={rows} selectedAccount={chosen.account}/> : <p className="mt-3 text-sm text-slate-500">该账户还没有净值记录。</p>}
               <p className="mt-2 text-[11px] leading-5 text-slate-400">
                 只读视图：不启动/暂停账户、不产生模拟订单；如需查看订单与持仓，去「交易与模拟 → 手动模拟」。
               </p>

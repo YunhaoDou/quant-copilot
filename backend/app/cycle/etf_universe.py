@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 from fastapi import APIRouter, Query
 from app.cycle.events import database, encode
+from app.cycle.resources import background_task
 from app.cycle.engine import load_config
 from app.cycle.live import TZ
 from app.cycle.market import fetch_quotes, fetch_daily
@@ -77,6 +78,7 @@ def refresh():
         with database() as db:schema(db);db.execute("INSERT OR REPLACE INTO etf_universe VALUES(1,?)",(encode(payload),))
         _state.update(total=len(rows),progress="逐只核验ETF真实报价与已完成日线")
         quotes={};errors=[]
+        @background_task
         def batch(codes):return fetch_quotes(codes)["quotes"]
         with ThreadPoolExecutor(max_workers=cfg["research_scan_workers"]) as pool:
             jobs={pool.submit(batch,[r["code"] for r in rows[i:i+100]]):i for i in range(0,len(rows),100)}
@@ -85,6 +87,7 @@ def refresh():
                 except Exception as exc:errors.append(str(exc)[:120])
         bucket=today+(":close" if now.hour>=15 else ":prior")
         with database() as db:cache={r[0]:json.loads(r[1]) for r in db.execute("SELECT code,payload FROM etf_evidence WHERE as_of=?",(bucket,))}
+        @background_task
         def collect(row):
             row=dict(row);row["data_errors"]=[];q=quotes.get(row["code"])
             row["quote"]=({**q,"pe":None,"pb":None} if q else None)

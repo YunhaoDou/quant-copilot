@@ -1,4 +1,5 @@
 "use client";
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import {useReadResource,useDebouncedValue} from "@/lib/read-resource";
 import { marketApiUrl } from "@/lib/live-market";
@@ -6,9 +7,9 @@ import { accountRulesSuffix, accountStatusText, formatAccountTime, toAccountView
 import { Card, buttonClass, secondaryButtonClass, money } from "./ui";
 import PaperAccountCard from "./PaperAccountCard";
 import TradeTable from "./TradeTable";
-import ShiborSimulationPanel from "./ShiborSimulationPanel";
-import TrendLeaderPanel from "./TrendLeaderPanel";
-import CycleStrategySimulation from "./CycleStrategySimulation";
+const ShiborSimulationPanel=dynamic(()=>import("./ShiborSimulationPanel"),{loading:()=> <p role="status" className="py-8 text-sm text-slate-500">正在载入策略详情…</p>});
+const TrendLeaderPanel=dynamic(()=>import("./TrendLeaderPanel"),{loading:()=> <p role="status" className="py-8 text-sm text-slate-500">正在载入策略详情…</p>});
+const CycleStrategySimulation=dynamic(()=>import("./CycleStrategySimulation"),{loading:()=> <p role="status" className="py-8 text-sm text-slate-500">正在载入策略详情…</p>});
 import LegacySimSection from "./LegacySimSection";
 
 type Account = {

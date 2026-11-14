@@ -4,6 +4,7 @@ from datetime import datetime
 import logging
 import json
 import sqlite3
+from contextlib import closing
 
 from app.cycle.engine import load_config
 from app.cycle.live import TZ, DB_PATH, live_dashboard
@@ -17,7 +18,7 @@ def restore_captures():
     if not DB_PATH.exists():
         return
     today = datetime.now(TZ).date().isoformat()
-    with sqlite3.connect(DB_PATH) as db:
+    with closing(sqlite3.connect(DB_PATH)) as db, db:
         exists = db.execute("SELECT 1 FROM sqlite_master WHERE name='snapshot_details'").fetchone()
         if not exists:
             return
@@ -101,7 +102,13 @@ async def run_account_monitor():
 async def run_read_model_monitor():
     """后台预热只读快照；失败保留旧版本，不触碰账户或补造数据。"""
     from app.cycle.read_api import dividend_model,screening_model
+    from app.cycle.read_cache import configure_limits
     while True:
+        from app.cycle.resources import configure
+        from app.cycle.market import configure_cache
+        configure_cache(load_config())
+        configure(load_config())
+        configure_limits(load_config())
         for build in (dividend_model,screening_model):
             try:await asyncio.to_thread(build)
             except Exception:logger.exception("只读快照预热失败，下一轮重试")
