@@ -103,7 +103,7 @@ export default function PersonalInvestmentSystem() {
     );
   }
 
-  const showLiveQuotes = view !== "market" && view !== "help";
+  const showLiveQuotes = view === "decision";
 
   return (
     <main className="min-h-screen bg-[#f4f6f2] text-slate-800">
@@ -149,7 +149,7 @@ export default function PersonalInvestmentSystem() {
         </nav>
 
         <div className="mt-5">
-          {showLiveQuotes && <div className="mb-5"><LiveQuotes /></div>}
+          {showLiveQuotes && <div className="mb-5"><LiveQuotes title="真实行情参考" /></div>}
 
           {view === "decision" && (
             <WorkspaceTabs label="决策台" param="tab" tabs={[

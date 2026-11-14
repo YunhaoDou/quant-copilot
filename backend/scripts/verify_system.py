@@ -38,7 +38,7 @@ def run(with_network=False,skip_browser=False):
     if ready:step('all_rows_parity',[python,ROOT/'backend/scripts/verify_data.py'],timeout=120)
     step('polling_policy',['node',ROOT/'frontend/test-polling-delay.cjs'])
     if ready and not skip_browser:
-        for file in ['test-readonly-guard.cjs','test-performance-safety.cjs','test-workspace-consolidation.cjs','test-security-search.cjs','test-lazy-strategy-chart.cjs','test-market-polling.cjs','test-market-retry.cjs','test-service-connection.cjs','test-fund-source-failure.cjs','test-lazy-navigation.cjs','test-polling-visibility.cjs','test-kline-interaction.cjs','test-runtime-status.cjs']:
+        for file in ['test-readonly-guard.cjs','test-performance-safety.cjs','test-workspace-consolidation.cjs','test-security-search.cjs','test-lazy-strategy-chart.cjs','test-market-polling.cjs','test-market-retry.cjs','test-service-connection.cjs','test-fund-source-failure.cjs','test-lazy-navigation.cjs','test-polling-visibility.cjs','test-kline-interaction.cjs','test-runtime-status.cjs','test-reference-placement.cjs']:
             step(file,['node',ROOT/'frontend'/file],timeout=120)
     if ready:
         step('benchmark_warm',[python,ROOT/'backend/scripts/benchmark_performance.py','--scenario','warm','--samples','12','--concurrency','4','--output',ROOT/'backend/logs/performance-verification.json'],timeout=600)

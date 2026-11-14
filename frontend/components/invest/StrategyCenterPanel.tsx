@@ -120,6 +120,6 @@ export default function StrategyCenterPanel({ strategyId }: { strategyId: string
         </Card>
       </>}
     </>}
-    <LegacySimSection />
+    {!strategyId && <LegacySimSection />}
   </div>;
 }

@@ -81,7 +81,7 @@ def _key_lock(registry,key):
 
 
 def document(path,table,ttl=1.):
-    """完整文档最多每秒核对一次；比较原文以识别同时间戳的实际修改。"""
+    """完整文档最多每秒核对一次；全文指纹识别同时间戳修改，不重复保留原始文本。"""
     key=(str(Path(path).resolve()),table)
     with _key_lock(_document_locks,key):
         with _lock:
@@ -103,13 +103,14 @@ def document(path,table,ttl=1.):
                     row=None
                 raw=row[0] if row else None
             finally:db.close()
-        if old and raw==old[3]:
-            item=(now,old[1],old[2],old[3])
+        fingerprint=sha256((raw or "null").encode()).hexdigest()
+        if old and fingerprint==old[3]:
+            item=(now,old[1],old[2],fingerprint)
         else:
             data=json.loads(raw) if raw else None
-            version=sha256((raw or "null").encode()).hexdigest()[:24]
-            item=(now,data,version,raw)
-        size=old_size if old and raw==old[3] and old_size is not None else deep_size(item)
+            version=fingerprint[:24]
+            item=(now,data,version,fingerprint)
+        size=old_size if old and fingerprint==old[3] and old_size is not None else deep_size(item)
         with _lock:
             # 显式失效之后，先前已在途的读取不得重新填充旧缓存。
             if epoch==_document_epoch:

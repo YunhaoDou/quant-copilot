@@ -34,7 +34,7 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next-release-cca125fc56e8ffcf/types/**/*.ts"
+    ".next-release-733765ebe0a8667e/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

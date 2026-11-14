@@ -96,3 +96,21 @@ def test_oversized_daily_frame_returns_all_rows_without_caching(monkeypatch):
     monkeypatch.setattr(market,'_fetch_daily_uncached',lambda *args:frame)
     result=market.fetch_daily('600519',50)
     assert result.equals(frame) and not market._daily_cache
+
+
+def test_document_keeps_digest_not_duplicate_raw_and_detects_same_length_update(tmp_path,monkeypatch):
+    path=tmp_path/'compact.sqlite';payload={'rows':['中'*10000]};raw=json.dumps(payload,ensure_ascii=False)
+    with sqlite3.connect(path) as db:
+        db.execute('CREATE TABLE board(id INTEGER PRIMARY KEY,payload TEXT)');db.execute('INSERT INTO board VALUES(1,?)',(raw,))
+    first,version=read_cache.document(path,'board',ttl=0)
+    key=(str(path.resolve()),'board');retained=read_cache._documents[key]
+    assert len(retained[3])==64 and retained[3]!=raw
+    original=read_cache.json.loads;calls=[]
+    def decode(value):calls.append(1);return original(value)
+    monkeypatch.setattr(read_cache.json,'loads',decode)
+    assert read_cache.document(path,'board',ttl=0)[0] is first and calls==[]
+    changed=raw.replace('中','文')
+    assert len(raw)==len(changed)
+    with sqlite3.connect(path) as db:db.execute('UPDATE board SET payload=?',(changed,))
+    second,new_version=read_cache.document(path,'board',ttl=0)
+    assert second['rows']==['文'*10000] and new_version!=version and calls==[1]

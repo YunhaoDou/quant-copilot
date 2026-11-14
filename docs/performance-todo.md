@@ -93,3 +93,5 @@
 第四轮验收与复跑命令见 [performance-round4.md](performance-round4.md)。
 
 最终轮实现及性能局限见 [performance-final.md](performance-final.md)。
+
+重复快照文本引起的缓存抖动已修复，见 [后续慢请求修复](performance-compact-cache.md)。
