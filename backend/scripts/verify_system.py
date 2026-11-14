@@ -13,7 +13,7 @@ from time import monotonic
 ROOT=Path(__file__).resolve().parents[2]
 
 
-def run(with_network=False,skip_browser=False):
+def run(with_network=False,skip_browser=False,with_official_master=False):
     steps=[];started=monotonic();env=os.environ.copy()
     if not env.get('PLAYWRIGHT_MODULE'):
         paths=glob.glob(str(Path.home()/'.npm/_npx/*/node_modules/playwright'))
@@ -43,12 +43,13 @@ def run(with_network=False,skip_browser=False):
     if ready:
         step('benchmark_warm',[python,ROOT/'backend/scripts/benchmark_performance.py','--scenario','warm','--samples','12','--concurrency','4','--output',ROOT/'backend/logs/performance-verification.json'],timeout=600)
         step('account_after',[python,ROOT/'scripts/account-checkpoint.py','check','--database',ROOT/'backend/data/cycle/events.sqlite','--checkpoint',checkpoint])
+    if with_official_master:step('official_master_online',[python,ROOT/'backend/scripts/verify_official_master.py'],timeout=120)
     if with_network:step('external_iopv',[python,'-m','pytest','-q','--tb=short','tests/test_fund_analysis.py::test_get_premium_snapshot_real_etf'],ROOT/'backend')
     status='passed' if ready and all(s['ok'] for s in steps) and not skip_browser else 'partial' if skip_browser and all(s['ok'] for s in steps) else 'failed'
-    report={'observed_at':datetime.now(timezone.utc).isoformat(),'status':status,'seconds':round(monotonic()-started,3),'browser_skipped':skip_browser,'external_iopv_checked':with_network,'independent_iopv':'未授权，按用户选择保留','steps':steps}
+    report={'observed_at':datetime.now(timezone.utc).isoformat(),'status':status,'seconds':round(monotonic()-started,3),'browser_skipped':skip_browser,'external_iopv_checked':with_network,'official_master_checked':with_official_master,'independent_iopv':'未授权，按用户选择保留','steps':steps}
     target=ROOT/'backend/logs/verification-latest.json';target.parent.mkdir(parents=True,exist_ok=True);tmp=target.with_suffix('.tmp');tmp.write_text(json.dumps(report,ensure_ascii=False,indent=2));tmp.replace(target)
     print(json.dumps({'status':status,'report':str(target),'steps':len(steps)},ensure_ascii=False));return status
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--with-network',action='store_true');parser.add_argument('--skip-browser',action='store_true');args=parser.parse_args();raise SystemExit(0 if run(args.with_network,args.skip_browser)=='passed' else 1)
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--with-network',action='store_true');parser.add_argument('--skip-browser',action='store_true');parser.add_argument('--with-official-master',action='store_true');args=parser.parse_args();raise SystemExit(0 if run(args.with_network,args.skip_browser,args.with_official_master)=='passed' else 1)

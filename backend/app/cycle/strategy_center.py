@@ -347,14 +347,23 @@ def _run_accounts():
             persist(db, name, current)
 
 
-def catalog():
+def catalog(lightweight=False,detail_id=None):
+    def read_account(db,name):
+        if not lightweight:return load(db,name)
+        # SQLite先投影，避免Python解析未展示的逐时处理记录；不写回账本。
+        omitted=['candidates']
+        if name!=detail_id:omitted+=['processed','trades','decisions','curve','completed_legs']
+        paths=["$."+field for field in omitted]
+        row=db.execute("SELECT json_remove(payload,"+",".join("?" for _ in paths)+") FROM research_strategy_accounts WHERE strategy_id=?",[*paths,name]).fetchone()
+        return json.loads(row[0]) if row else None
+
     with database() as db:
         schema(db)
         # 情绪龙头回补沿用旧情绪周期影子账户（strategy_sim 表），这里只读同一份账本，
         # 让目录页也能显示运行状态与参考权益；不复制、不新建账户。
         leader_account = read_strategy_sim(db)
         strategies = [
-            {**spec, "account": leader_account if spec["id"] == "leader-rebound" else load(db, spec["id"])}
+            {**spec, "account": leader_account if spec["id"] == "leader-rebound" else read_account(db, spec["id"])}
             for spec in CATALOG
         ]
     progress = dict(_refresh)

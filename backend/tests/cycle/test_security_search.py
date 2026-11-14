@@ -59,3 +59,10 @@ def test_missing_etf_source_is_explicit_unknown_not_zero(fixture):
     with sqlite3.connect(path) as db:db.execute('DELETE FROM etf_universe')
     read_cache.invalidate_documents();data=client.get('/tickers/search').json()
     assert data['etf_total'] is None and data['notes'] and data['total']==322
+
+
+def test_source_date_uses_actual_stock_snapshot_field(fixture):
+    client,path,stocks,_=fixture
+    with sqlite3.connect(path) as db:db.execute('UPDATE all_a_universe SET payload=?',(json.dumps({'stocks':stocks,'updatedAt':'2026-11-14T10:00:00+08:00'}),))
+    read_cache.invalidate_documents()
+    assert client.get('/tickers/search').json()['source_updated_at']['stocks']=='2026-11-14T10:00:00+08:00'

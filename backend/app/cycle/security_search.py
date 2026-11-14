@@ -17,7 +17,7 @@ def master():
         return {'rows':rows,'total':len(rows),'stock_total':len(stocks.get('stocks',[])),
             'etf_total':len(etfs.get('rows',[])) if etfs else None,
             'source':{'stocks':stocks.get('source'),'etfs':(etfs or {}).get('source')},
-            'source_updated_at':{'stocks':stocks.get('updated_at'),'etfs':(etfs or {}).get('updated_at')},
+            'source_updated_at':{'stocks':stocks.get('updatedAt') or stocks.get('updated_at'),'etfs':(etfs or {}).get('updated_at')},
             'notes':[] if etfs else ['ETF名单尚未就绪，ETF覆盖未知，当前只展示已核实股票名单']}
     return read_cache.model('security-master',(str(events.DB_PATH),stock_version,etf_version),build)
 

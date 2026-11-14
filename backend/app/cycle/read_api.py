@@ -116,7 +116,7 @@ def legacy_screening(request):
 @router.get("/strategy-center/overview")
 def strategy_overview(request:Request,detail_id:str|None=None):
     from app.cycle.strategy_center import catalog
-    data=catalog()
+    data=catalog(lightweight=True,detail_id=detail_id)
     for spec in data["strategies"]:
         a=spec.get("account")
         if not a:continue

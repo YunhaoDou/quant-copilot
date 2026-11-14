@@ -182,3 +182,5 @@ quant-copilot/
 在项目目录执行 `backend/.venv/bin/python backend/scripts/verify_system.py` 可运行统一验收；不调用AI、不操作真实交易。外部IOPV用例需显式选择，未授权源保持关闭。
 
 实现、复跑方式及实测限制见 [最终优化记录](docs/performance-final.md) 和 [性能待办](docs/performance-todo.md)。
+
+加 `--with-official-master` 可在线核对交易所完整股票及ETF名单；只读核验，不覆盖快照。后续收口与外部限制见 [剩余优化收口](docs/performance-closeout.md)。
